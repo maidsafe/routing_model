@@ -76,6 +76,7 @@ const OUR_NAME: Name = Name(OUR_NODE.0.name);
 const OUR_NODE_CANDIDATE: Candidate = Candidate(NODE_ELDER_132.0);
 const OUR_PROOF_REQUEST: ProofRequest = ProofRequest { value: OUR_NAME.0 };
 const OUR_INITIAL_SECTION_INFO: SectionInfo = SectionInfo(OUR_SECTION, 0);
+const OUR_NEXT_SECTION_INFO: SectionInfo = SectionInfo(OUR_SECTION, 1);
 const OUR_GENESIS_INFO: GenesisPfxInfo = GenesisPfxInfo(OUR_INITIAL_SECTION_INFO);
 
 lazy_static! {
@@ -673,10 +674,14 @@ mod dst_tests {
         run_test(
             "Get Parsec ExpectCandidate then Online (No Elder Change)",
             &initial_state,
-            &[ParsecVote::Online(CANDIDATE_1).to_event()],
+            &[
+                ParsecVote::Online(CANDIDATE_1).to_event(),
+                ParsecVote::CheckElder.to_event(),
+            ],
             &AssertState {
                 action_our_rpcs: vec![Rpc::NodeApproval(CANDIDATE_1, OUR_GENESIS_INFO)],
                 action_our_nodes: vec![SET_ONLINE_NODE_1],
+                action_our_events: vec![LocalEvent::TimeoutCheckElder],
                 ..AssertState::default()
             },
         );
@@ -789,7 +794,7 @@ mod dst_tests {
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
                 ParsecVote::Online(CANDIDATE_1).to_event(),
-                // Does not do anything useful.
+                ParsecVote::CheckElder.to_event(),
                 ParsecVote::RemoveElderNode(NODE_ELDER_109).to_event(),
             ],
         );
@@ -802,7 +807,15 @@ mod dst_tests {
                 ParsecVote::AddElderNode(NODE_1).to_event(),
                 ParsecVote::NewSectionInfo(SECTION_INFO_1).to_event(),
             ],
-            &AssertState::default(),
+            & AssertState{
+                action_our_section: SECTION_INFO_1,
+                action_our_nodes: vec![
+                    NodeChange::Elder(NODE_1, true),
+                    NodeChange::Elder(NODE_ELDER_109, false),
+                ],
+                action_our_events: vec![LocalEvent::TimeoutCheckElder],
+                ..AssertState::default()
+            },
         );
     }
 
@@ -814,6 +827,7 @@ mod dst_tests {
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
                 ParsecVote::Online(CANDIDATE_1).to_event(),
+                ParsecVote::CheckElder.to_event(),
                 ParsecVote::RemoveElderNode(NODE_ELDER_109).to_event(),
                 ParsecVote::AddElderNode(NODE_1).to_event(),
                 ParsecVote::NewSectionInfo(SECTION_INFO_1).to_event(),
@@ -829,8 +843,9 @@ mod dst_tests {
                 ParsecVote::CheckResourceProof.to_event(),
             ],
             &&AssertState {
+                action_our_section: SECTION_INFO_1,
                 action_our_nodes: vec![ADD_PROOFING_NODE_2],
-                action_our_rpcs: vec![Rpc::RelocateResponse(CANDIDATE_2, OUR_INITIAL_SECTION_INFO)],
+                action_our_rpcs: vec![Rpc::RelocateResponse(CANDIDATE_2, OUR_NEXT_SECTION_INFO)],
                 sub_routine_accept_as_candidate: AcceptAsCandidateState {
                     candidate: Some(CANDIDATE_2),
                     got_candidate_info: false,
@@ -901,7 +916,10 @@ mod dst_tests {
         run_test(
             &"Get Parsec ExpectCandidate with a shorter known section",
             &initial_state,
-            &[ParsecVote::ExpectCandidate(CANDIDATE_1).to_event()],
+            &[
+                ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
+            ],
             &AssertState {
                 action_our_rpcs: vec![Rpc::ResendExpectCandidate(OTHER_SECTION_1, CANDIDATE_1)],
                 ..AssertState::default()
