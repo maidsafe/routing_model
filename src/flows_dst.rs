@@ -22,9 +22,6 @@ impl TopLevelDst {
         match event {
             Event::Rpc(rpc) => self.try_rpc(rpc),
             Event::ParsecConsensus(vote) => self.try_consensus(vote),
-            Event::LocalEvent(LocalEvent::TimeoutAccept) => {
-                return Some(self.0.failure_event(event));
-            }
             _ => None,
         }
         .map(|state| state.0)
@@ -33,7 +30,6 @@ impl TopLevelDst {
     fn try_rpc(&self, rpc: Rpc) -> Option<Self> {
         match rpc {
             Rpc::ExpectCandidate(candidate) => Some(self.vote_parsec_expect_candidate(candidate)),
-            Rpc::ResourceProofResponse { .. } | Rpc::CandidateInfo { .. } => Some(self.discard()),
             _ => None,
         }
     }
@@ -43,7 +39,6 @@ impl TopLevelDst {
             ParsecVote::ExpectCandidate(candidate) => {
                 self.try_consensused_expect_candidate(candidate)
             }
-            ParsecVote::Online(_) | ParsecVote::PurgeCandidate(_) => Some(self.discard()),
 
             // Delegate to other event loops
             _ => None,
@@ -52,35 +47,34 @@ impl TopLevelDst {
 
     fn try_consensused_expect_candidate(&self, candidate: Candidate) -> Option<Self> {
         match (
-            self.0.dst_routine.is_processing_candidate,
+            self.0
+                .action
+                .waiting_proofing_or_hop()
+                .contains(&Node(candidate.0)),
+            self.0.action.waiting_proofing_or_hop().is_empty(),
             self.0.action.check_shortest_prefix(),
         ) {
-            (_, Some(section)) => Some(self.resend_expect_candidate_rpc(candidate, section)),
-            (true, None) => Some(self.send_refuse_candidate_rpc(candidate)),
-            (false, None) => Some(self.concurrent_transition_to_accept_as_candidate(candidate)),
+            (_, _, Some(section)) => Some(self.resend_expect_candidate_rpc(candidate, section)),
+            (_, false, None) => Some(self.send_refuse_candidate_rpc(candidate)),
+            (_, true, None) => Some(
+                self.add_node_ressource_proofing(candidate)
+                    .send_relocate_response_rpc(candidate),
+            ),
         }
     }
 
-    fn concurrent_transition_to_accept_as_candidate(&self, candidate: Candidate) -> Self {
-        self.set_is_processing_candidate(true)
-            .0
-            .as_accept_as_candidate()
-            .start_event_loop(candidate)
-            .0
-            .as_top_level_dst()
+    fn add_node_ressource_proofing(&self, candidate: Candidate) -> Self {
+        self.0.action.add_node_resource_proofing(candidate);
+        self.clone()
     }
 
-    fn transition_exit_accept_as_candidate(&self) -> Self {
-        self.set_is_processing_candidate(false)
+    fn send_refuse_candidate_rpc(&self, candidate: Candidate) -> Self {
+        self.0.action.send_rpc(Rpc::RefuseCandidate(candidate));
+        self.clone()
     }
 
-    fn set_is_processing_candidate(&self, value: bool) -> Self {
-        let mut state = self.clone();
-        state.0.dst_routine.is_processing_candidate = value;
-        state
-    }
-
-    fn discard(&self) -> Self {
+    fn send_relocate_response_rpc(&self, candidate: Candidate) -> Self {
+        self.0.action.send_relocate_response_rpc(candidate);
         self.clone()
     }
 
@@ -90,12 +84,6 @@ impl TopLevelDst {
             .vote_parsec(ParsecVote::ExpectCandidate(candidate));
         self.clone()
     }
-
-    fn send_refuse_candidate_rpc(&self, candidate: Candidate) -> Self {
-        self.0.action.send_rpc(Rpc::RefuseCandidate(candidate));
-        self.clone()
-    }
-
     fn resend_expect_candidate_rpc(&self, candidate: Candidate, section: Section) -> Self {
         self.0
             .action
@@ -109,21 +97,11 @@ pub struct AcceptAsCandidate(pub MemberState);
 
 // AcceptAsCandidate Sub Routine
 impl AcceptAsCandidate {
-    fn start_event_loop(&self, candidate: Candidate) -> Self {
-        self.0
-            .with_dst_sub_routine_accept_as_candidate(Some(AcceptAsCandidateState::new(candidate)))
-            .as_accept_as_candidate()
-            .add_node_resource_proofing()
-            .send_relocate_response_rpc()
-    }
-
-    fn exit_event_loop(&self) -> Self {
-        self.0
-            .with_dst_sub_routine_accept_as_candidate(None)
-            .as_top_level_dst()
-            .transition_exit_accept_as_candidate()
-            .0
-            .as_accept_as_candidate()
+    // TODO - remove the `allow` once we have a test for this method.
+    #[allow(dead_code)]
+    fn start_event_loop(&self) -> Self {
+        self.0.action.schedule_event(LocalEvent::CheckResourceProofTimeout);
+        self.clone()
     }
 
     pub fn try_next(&self, event: Event) -> Option<MemberState> {
@@ -135,9 +113,7 @@ impl AcceptAsCandidate {
                 candidate, proof, ..
             }) => self.try_rpc_proof(candidate, proof),
             Event::ParsecConsensus(vote) => self.try_consensus(vote),
-            Event::LocalEvent(LocalEvent::TimeoutAccept) => {
-                Some(self.vote_parsec_purge_candidate())
-            }
+            Event::LocalEvent(local_event) => self.try_local_event(local_event),
             // Delegate to other event loops
             _ => None,
         }
@@ -145,8 +121,11 @@ impl AcceptAsCandidate {
     }
 
     fn try_rpc_info(&self, candidate: Candidate, valid: bool) -> Option<Self> {
-        if candidate != self.candidate() || self.routine_state().got_candidate_info {
-            return None;
+        if !self.has_candidate()
+            || candidate != self.candidate()
+            || self.routine_state().got_candidate_info
+        {
+            return Some(self.discard());
         }
 
         Some(if valid {
@@ -157,8 +136,12 @@ impl AcceptAsCandidate {
     }
 
     fn try_rpc_proof(&self, candidate: Candidate, proof: Proof) -> Option<Self> {
-        if candidate != self.candidate() || self.routine_state().voted_online || !proof.is_valid() {
-            return None;
+        if !self.has_candidate()
+            || candidate != self.candidate()
+            || self.routine_state().voted_online
+            || !proof.is_valid()
+        {
+            return Some(self.discard());
         }
 
         Some(match proof {
@@ -169,32 +152,43 @@ impl AcceptAsCandidate {
     }
 
     fn try_consensus(&self, vote: ParsecVote) -> Option<Self> {
-        if vote.candidate() != Some(self.candidate()) {
-            return None;
-        }
+        let from_candidate = self.has_candidate() && vote.candidate() == Some(self.candidate());
 
         match vote {
-            ParsecVote::Online(_) => Some(self.make_node_online()),
-            ParsecVote::PurgeCandidate(_) => Some(self.remove_node()),
+            ParsecVote::CheckResourceProof => Some(self.set_resource_proof_candidate()),
+            ParsecVote::Online(_) if from_candidate => Some(self.make_node_online()),
+            ParsecVote::PurgeCandidate(_) if from_candidate => Some(self.remove_node()),
+            ParsecVote::Online(_) | ParsecVote::PurgeCandidate(_) => Some(self.discard()),
 
             // Delegate to other event loops
             _ => None,
         }
     }
 
-    fn routine_state(&self) -> &AcceptAsCandidateState {
-        match &self.0.dst_routine.sub_routine_accept_as_candidate {
-            Some(state) => state,
-            _ => panic!("Expect AcceptAsCandidate {:?}", &self),
+    fn try_local_event(&self, local_event: LocalEvent) -> Option<Self> {
+        match local_event {
+            LocalEvent::TimeoutAccept => Some(self.vote_parsec_purge_candidate()),
+            LocalEvent::CheckResourceProofTimeout => Some(self.vote_parsec_check_resource_proof()),
+            _ => None,
         }
     }
 
+    fn routine_state(&self) -> &AcceptAsCandidateState {
+        &self.0.sub_routine_accept_as_candidate
+    }
+
     fn mut_routine_state(&mut self) -> &mut AcceptAsCandidateState {
-        let clone = self.clone();
-        match &mut self.0.dst_routine.sub_routine_accept_as_candidate {
-            Some(state) => state,
-            _ => panic!("Expect AcceptAsCandidate {:?}", &clone),
-        }
+        &mut self.0.sub_routine_accept_as_candidate
+    }
+
+    fn discard(&self) -> Self {
+        self.clone()
+    }
+
+    fn set_resource_proof_candidate(&self) -> Self {
+        let mut state = self.clone();
+        state.mut_routine_state().candidate = state.0.action.resource_proof_candidate();
+        state
     }
 
     fn set_got_candidate_info(&self, value: bool) -> Self {
@@ -216,6 +210,11 @@ impl AcceptAsCandidate {
         self.clone()
     }
 
+    fn vote_parsec_check_resource_proof(&self) -> Self {
+        self.0.action.vote_parsec(ParsecVote::CheckResourceProof);
+        self.clone()
+    }
+
     fn vote_parsec_online_candidate(&self) -> Self {
         self.0
             .action
@@ -223,25 +222,23 @@ impl AcceptAsCandidate {
         self.clone()
     }
 
-    fn add_node_resource_proofing(&self) -> Self {
-        self.0.action.add_node_resource_proofing(self.candidate());
-        self.clone()
-    }
-
     fn make_node_online(&self) -> Self {
         self.0.action.set_candidate_online_state(self.candidate());
         self.0.action.send_node_approval_rpc(self.candidate());
-        self.exit_event_loop()
+        self.finish_resource_proof()
     }
 
     fn remove_node(&self) -> Self {
         self.0.action.remove_node(self.candidate());
-        self.exit_event_loop()
+        self.finish_resource_proof()
     }
 
-    fn send_relocate_response_rpc(&self) -> Self {
-        self.0.action.send_relocate_response_rpc(self.candidate());
-        self.clone()
+    fn finish_resource_proof(&self) -> Self {
+        let mut state = self.clone();
+        state.mut_routine_state().candidate = None;
+        state.mut_routine_state().voted_online = false;
+        state.mut_routine_state().got_candidate_info = false;
+        state
     }
 
     fn send_resource_proof_rpc(&self) -> Self {
@@ -255,7 +252,11 @@ impl AcceptAsCandidate {
     }
 
     fn candidate(&self) -> Candidate {
-        self.routine_state().candidate
+        unwrap!(self.routine_state().candidate)
+    }
+
+    fn has_candidate(&self) -> bool {
+        self.routine_state().candidate.is_some()
     }
 }
 

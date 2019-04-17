@@ -314,6 +314,26 @@ impl Action {
             .unwrap_or(false)
     }
 
+    pub fn waiting_proofing_or_hop(&self) -> Vec<Node> {
+        self.0
+            .borrow()
+            .our_current_nodes
+            .values()
+            .filter(|state| state.state.is_resource_proofing())
+            .map(|state| state.node)
+            .collect()
+    }
+
+    pub fn resource_proof_candidate(&self) -> Option<Candidate> {
+        self.0
+            .borrow()
+            .our_current_nodes
+            .values()
+            .filter(|state| state.state.is_resource_proofing())
+            .map(|state| Candidate(state.node.0))
+            .next()
+    }
+
     pub fn is_our_name(&self, name: Name) -> bool {
         self.our_name() == name
     }

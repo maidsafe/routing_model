@@ -21,32 +21,16 @@ pub struct CheckAndProcessElderChangeState {
     pub sub_routine_process_elder_change: ProcessElderChangeState,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Default, Clone)]
 pub struct AcceptAsCandidateState {
-    pub candidate: Candidate,
+    pub candidate: Option<Candidate>,
     pub got_candidate_info: bool,
     pub voted_online: bool,
-}
-
-impl AcceptAsCandidateState {
-    pub fn new(candidate: Candidate) -> Self {
-        Self {
-            candidate,
-            got_candidate_info: false,
-            voted_online: false,
-        }
-    }
 }
 
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct StartRelocateSrcState {
     pub already_relocating: BTreeMap<Candidate, i32>,
-}
-
-#[derive(Debug, PartialEq, Default, Clone)]
-pub struct DstRoutineState {
-    pub is_processing_candidate: bool,
-    pub sub_routine_accept_as_candidate: Option<AcceptAsCandidateState>,
 }
 
 #[derive(Debug, PartialEq, Default, Clone)]
@@ -57,7 +41,7 @@ pub struct SrcRoutineState {}
 pub struct MemberState {
     pub action: Action,
     pub failure: Option<Event>,
-    pub dst_routine: DstRoutineState,
+    pub sub_routine_accept_as_candidate: AcceptAsCandidateState,
     pub src_routine: SrcRoutineState,
     pub start_relocate_src: StartRelocateSrcState,
     pub check_and_process_elder_change_routine: CheckAndProcessElderChangeState,
@@ -65,8 +49,6 @@ pub struct MemberState {
 
 impl MemberState {
     pub fn try_next(&self, event: Event) -> Option<Self> {
-        let dst = &self.dst_routine;
-
         if let Some(next) = self.as_check_and_process_elder_change().try_next(event) {
             return Some(next);
         }
@@ -93,10 +75,8 @@ impl MemberState {
             return Some(next);
         }
 
-        if dst.sub_routine_accept_as_candidate.is_some() {
-            if let Some(next) = self.as_accept_as_candidate().try_next(event) {
-                return Some(next);
-            }
+        if let Some(next) = self.as_accept_as_candidate().try_next(event) {
+            return Some(next);
         }
 
         if let Some(next) = self.as_top_level_dst().try_next(event) {
@@ -146,19 +126,6 @@ impl MemberState {
     pub fn failure_event(&self, event: Event) -> Self {
         Self {
             failure: Some(event),
-            ..self.clone()
-        }
-    }
-
-    pub fn with_dst_sub_routine_accept_as_candidate(
-        &self,
-        sub_routine_accept_as_candidate: Option<AcceptAsCandidateState>,
-    ) -> Self {
-        Self {
-            dst_routine: DstRoutineState {
-                sub_routine_accept_as_candidate,
-                ..self.dst_routine.clone()
-            },
             ..self.clone()
         }
     }

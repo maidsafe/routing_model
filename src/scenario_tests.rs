@@ -147,7 +147,7 @@ struct AssertState {
     action_our_events: Vec<LocalEvent>,
     action_our_section: SectionInfo,
     action_merge_infos: Option<MergeInfo>,
-    dst_routine: DstRoutineState,
+    sub_routine_accept_as_candidate: AcceptAsCandidateState,
     check_and_process_elder_change_routine: CheckAndProcessElderChangeState,
 }
 
@@ -183,7 +183,7 @@ fn run_test(
             action_our_events: action.our_events,
             action_our_section: action.our_section,
             action_merge_infos: action.merge_infos,
-            dst_routine: final_state.dst_routine,
+            sub_routine_accept_as_candidate: final_state.sub_routine_accept_as_candidate,
             check_and_process_elder_change_routine: final_state
                 .check_and_process_elder_change_routine,
         },
@@ -214,15 +214,6 @@ fn initial_state_old_elders() -> MemberState {
     }
 }
 
-fn routine_state_accept_as_candidate(
-    accept_as_candidate: AcceptAsCandidateState,
-) -> DstRoutineState {
-    DstRoutineState {
-        is_processing_candidate: true,
-        sub_routine_accept_as_candidate: Some(accept_as_candidate),
-    }
-}
-
 //////////////////
 /// Dst
 //////////////////
@@ -248,15 +239,18 @@ mod dst_tests {
         run_test(
             "Get Parsec ExpectCandidate",
             &initial_state_old_elders(),
-            &[ParsecVote::ExpectCandidate(CANDIDATE_1).to_event()],
+            &[
+                ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
+            ],
             &AssertState {
                 action_our_nodes: vec![ADD_PROOFING_NODE_1],
                 action_our_rpcs: vec![Rpc::RelocateResponse(CANDIDATE_1, OUR_INITIAL_SECTION_INFO)],
-                dst_routine: routine_state_accept_as_candidate(AcceptAsCandidateState {
-                    candidate: CANDIDATE_1,
+                sub_routine_accept_as_candidate: AcceptAsCandidateState {
+                    candidate: Some(CANDIDATE_1),
                     got_candidate_info: false,
                     voted_online: false,
-                }),
+                },
                 ..AssertState::default()
             },
         );
@@ -266,7 +260,10 @@ mod dst_tests {
     fn parsec_expect_candidate_then_candidate_info() {
         let initial_state = arrange_initial_state(
             &initial_state_old_elders(),
-            &[ParsecVote::ExpectCandidate(CANDIDATE_1).to_event()],
+            &[
+                ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
+            ],
         );
 
         run_test(
@@ -279,11 +276,11 @@ mod dst_tests {
                     source: OUR_NAME,
                     proof: OUR_PROOF_REQUEST,
                 }],
-                dst_routine: routine_state_accept_as_candidate(AcceptAsCandidateState {
-                    candidate: CANDIDATE_1,
+                sub_routine_accept_as_candidate: AcceptAsCandidateState {
+                    candidate: Some(CANDIDATE_1),
                     got_candidate_info: true,
                     voted_online: false,
-                }),
+                },
                 ..AssertState::default()
             },
         );
@@ -295,6 +292,7 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
                 CANDIDATE_INFO_VALID_RPC_1.to_event(),
             ],
         );
@@ -304,11 +302,11 @@ mod dst_tests {
             &initial_state,
             &[CANDIDATE_INFO_VALID_RPC_1.to_event()],
             &AssertState {
-                dst_routine: routine_state_accept_as_candidate(AcceptAsCandidateState {
-                    candidate: CANDIDATE_1,
+                sub_routine_accept_as_candidate: AcceptAsCandidateState {
+                    candidate: Some(CANDIDATE_1),
                     got_candidate_info: true,
                     voted_online: false,
-                }),
+                },
                 ..AssertState::default()
             },
         );
@@ -318,7 +316,10 @@ mod dst_tests {
     fn parsec_expect_candidate_then_invalid_candidate_info() {
         let initial_state = arrange_initial_state(
             &initial_state_old_elders(),
-            &[ParsecVote::ExpectCandidate(CANDIDATE_1).to_event()],
+            &[
+                ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
+            ],
         );
 
         run_test(
@@ -332,11 +333,11 @@ mod dst_tests {
             .to_event()],
             &AssertState {
                 action_our_votes: vec![ParsecVote::PurgeCandidate(CANDIDATE_1)],
-                dst_routine: routine_state_accept_as_candidate(AcceptAsCandidateState {
-                    candidate: CANDIDATE_1,
+                sub_routine_accept_as_candidate: AcceptAsCandidateState {
+                    candidate: Some(CANDIDATE_1),
                     got_candidate_info: false,
                     voted_online: false,
-                }),
+                },
                 ..AssertState::default()
             },
         );
@@ -346,7 +347,10 @@ mod dst_tests {
     fn parsec_expect_candidate_then_time_out() {
         let initial_state = arrange_initial_state(
             &initial_state_old_elders(),
-            &[ParsecVote::ExpectCandidate(CANDIDATE_1).to_event()],
+            &[
+                ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
+            ],
         );
 
         run_test(
@@ -355,11 +359,11 @@ mod dst_tests {
             &[LocalEvent::TimeoutAccept.to_event()],
             &AssertState {
                 action_our_votes: vec![ParsecVote::PurgeCandidate(CANDIDATE_1)],
-                dst_routine: routine_state_accept_as_candidate(AcceptAsCandidateState {
-                    candidate: CANDIDATE_1,
+                sub_routine_accept_as_candidate: AcceptAsCandidateState {
+                    candidate: Some(CANDIDATE_1),
                     got_candidate_info: false,
                     voted_online: false,
-                }),
+                },
                 ..AssertState::default()
             },
         );
@@ -369,7 +373,10 @@ mod dst_tests {
     fn parsec_expect_candidate_then_wrong_candidate_info() {
         let initial_state = arrange_initial_state(
             &initial_state_old_elders(),
-            &[ParsecVote::ExpectCandidate(CANDIDATE_1).to_event()],
+            &[
+                ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
+            ],
         );
 
         run_test(
@@ -382,11 +389,11 @@ mod dst_tests {
             }
             .to_event()],
             &AssertState {
-                dst_routine: routine_state_accept_as_candidate(AcceptAsCandidateState {
-                    candidate: CANDIDATE_1,
+                sub_routine_accept_as_candidate: AcceptAsCandidateState {
+                    candidate: Some(CANDIDATE_1),
                     got_candidate_info: false,
                     voted_online: false,
-                }),
+                },
                 ..AssertState::default()
             },
         );
@@ -398,6 +405,7 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
                 CANDIDATE_INFO_VALID_RPC_1.to_event(),
             ],
         );
@@ -416,11 +424,11 @@ mod dst_tests {
                     candidate: CANDIDATE_1,
                     source: OUR_NAME,
                 }],
-                dst_routine: routine_state_accept_as_candidate(AcceptAsCandidateState {
-                    candidate: CANDIDATE_1,
+                sub_routine_accept_as_candidate: AcceptAsCandidateState {
+                    candidate: Some(CANDIDATE_1),
                     got_candidate_info: true,
                     voted_online: false,
-                }),
+                },
                 ..AssertState::default()
             },
         );
@@ -432,6 +440,7 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
                 CANDIDATE_INFO_VALID_RPC_1.to_event(),
             ],
         );
@@ -447,11 +456,11 @@ mod dst_tests {
             .to_event()],
             &AssertState {
                 action_our_votes: vec![ParsecVote::Online(CANDIDATE_1)],
-                dst_routine: routine_state_accept_as_candidate(AcceptAsCandidateState {
-                    candidate: CANDIDATE_1,
+                sub_routine_accept_as_candidate: AcceptAsCandidateState {
+                    candidate: Some(CANDIDATE_1),
                     got_candidate_info: true,
                     voted_online: true,
-                }),
+                },
                 ..AssertState::default()
             },
         );
@@ -463,6 +472,7 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
                 CANDIDATE_INFO_VALID_RPC_1.to_event(),
                 Rpc::ResourceProofResponse {
                     candidate: CANDIDATE_1,
@@ -483,11 +493,11 @@ mod dst_tests {
             }
             .to_event()],
             &AssertState {
-                dst_routine: routine_state_accept_as_candidate(AcceptAsCandidateState {
-                    candidate: CANDIDATE_1,
+                sub_routine_accept_as_candidate: AcceptAsCandidateState {
+                    candidate: Some(CANDIDATE_1),
                     got_candidate_info: true,
                     voted_online: true,
-                }),
+                },
                 ..AssertState::default()
             },
         );
@@ -499,6 +509,7 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
                 CANDIDATE_INFO_VALID_RPC_1.to_event(),
             ],
         );
@@ -513,11 +524,11 @@ mod dst_tests {
             }
             .to_event()],
             &AssertState {
-                dst_routine: routine_state_accept_as_candidate(AcceptAsCandidateState {
-                    candidate: CANDIDATE_1,
+                sub_routine_accept_as_candidate: AcceptAsCandidateState {
+                    candidate: Some(CANDIDATE_1),
                     got_candidate_info: true,
                     voted_online: false,
-                }),
+                },
                 ..AssertState::default()
             },
         );
@@ -529,6 +540,7 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
                 CANDIDATE_INFO_VALID_RPC_1.to_event(),
             ],
         );
@@ -543,11 +555,11 @@ mod dst_tests {
             }
             .to_event()],
             &AssertState {
-                dst_routine: routine_state_accept_as_candidate(AcceptAsCandidateState {
-                    candidate: CANDIDATE_1,
+                sub_routine_accept_as_candidate: AcceptAsCandidateState {
+                    candidate: Some(CANDIDATE_1),
                     got_candidate_info: true,
                     voted_online: false,
-                }),
+                },
                 ..AssertState::default()
             },
         );
@@ -557,7 +569,10 @@ mod dst_tests {
     fn parsec_expect_candidate_then_purge_and_online_for_wrong_candidate() {
         let initial_state = arrange_initial_state(
             &initial_state_young_elders(),
-            &[ParsecVote::ExpectCandidate(CANDIDATE_1).to_event()],
+            &[
+                ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
+            ],
         );
 
         run_test(
@@ -568,11 +583,11 @@ mod dst_tests {
                 ParsecVote::PurgeCandidate(CANDIDATE_2).to_event(),
             ],
             &AssertState {
-                dst_routine: routine_state_accept_as_candidate(AcceptAsCandidateState {
-                    candidate: CANDIDATE_1,
+                sub_routine_accept_as_candidate: AcceptAsCandidateState {
+                    candidate: Some(CANDIDATE_1),
                     got_candidate_info: false,
                     voted_online: false,
-                }),
+                },
                 ..AssertState::default()
             },
         );
@@ -649,7 +664,10 @@ mod dst_tests {
     fn parsec_expect_candidate_then_online_no_elder_change() {
         let initial_state = arrange_initial_state(
             &initial_state_old_elders(),
-            &[ParsecVote::ExpectCandidate(CANDIDATE_1).to_event()],
+            &[
+                ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
+            ],
         );
 
         run_test(
@@ -668,7 +686,10 @@ mod dst_tests {
     fn parsec_expect_candidate_then_online_elder_change() {
         let initial_state = arrange_initial_state(
             &initial_state_young_elders(),
-            &[ParsecVote::ExpectCandidate(CANDIDATE_1).to_event()],
+            &[
+                ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
+            ],
         );
 
         run_test(
@@ -700,6 +721,7 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
                 ParsecVote::Online(CANDIDATE_1).to_event(),
                 ParsecVote::CheckElder.to_event(),
             ],
@@ -733,6 +755,7 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
                 ParsecVote::Online(CANDIDATE_1).to_event(),
                 ParsecVote::CheckElder.to_event(),
             ],
@@ -764,7 +787,9 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
                 ParsecVote::Online(CANDIDATE_1).to_event(),
+                // Does not do anything useful.
                 ParsecVote::RemoveElderNode(NODE_ELDER_109).to_event(),
             ],
         );
@@ -787,6 +812,7 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
                 ParsecVote::Online(CANDIDATE_1).to_event(),
                 ParsecVote::RemoveElderNode(NODE_ELDER_109).to_event(),
                 ParsecVote::AddElderNode(NODE_1).to_event(),
@@ -798,15 +824,18 @@ mod dst_tests {
             "Get Parsec ExpectCandidate after first candidate completed \
              with elder change",
             &initial_state,
-            &[ParsecVote::ExpectCandidate(CANDIDATE_2).to_event()],
+            &[
+                ParsecVote::ExpectCandidate(CANDIDATE_2).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
+            ],
             &&AssertState {
                 action_our_nodes: vec![ADD_PROOFING_NODE_2],
                 action_our_rpcs: vec![Rpc::RelocateResponse(CANDIDATE_2, OUR_INITIAL_SECTION_INFO)],
-                dst_routine: routine_state_accept_as_candidate(AcceptAsCandidateState {
-                    candidate: CANDIDATE_2,
+                sub_routine_accept_as_candidate: AcceptAsCandidateState {
+                    candidate: Some(CANDIDATE_2),
                     got_candidate_info: false,
                     voted_online: false,
-                }),
+                },
                 ..AssertState::default()
             },
         );
@@ -816,7 +845,10 @@ mod dst_tests {
     fn parsec_expect_candidate_then_purge() {
         let initial_state = arrange_initial_state(
             &initial_state_young_elders(),
-            &[ParsecVote::ExpectCandidate(CANDIDATE_1).to_event()],
+            &[
+                ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
+            ],
         );
 
         run_test(
@@ -834,7 +866,10 @@ mod dst_tests {
     fn parsec_expect_candidate_twice() {
         let initial_state = arrange_initial_state(
             &initial_state_young_elders(),
-            &[ParsecVote::ExpectCandidate(CANDIDATE_1).to_event()],
+            &[
+                ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
+            ],
         );
 
         run_test(
@@ -843,11 +878,11 @@ mod dst_tests {
             &[ParsecVote::ExpectCandidate(CANDIDATE_2).to_event()],
             &AssertState {
                 action_our_rpcs: vec![Rpc::RefuseCandidate(CANDIDATE_2)],
-                dst_routine: routine_state_accept_as_candidate(AcceptAsCandidateState {
-                    candidate: CANDIDATE_1,
+                sub_routine_accept_as_candidate: AcceptAsCandidateState {
+                    candidate: Some(CANDIDATE_1),
                     got_candidate_info: false,
                     voted_online: false,
-                }),
+                },
                 ..AssertState::default()
             },
         );

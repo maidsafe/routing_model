@@ -74,6 +74,11 @@ impl State {
     pub fn is_relocating(self) -> bool {
         self == State::RelocatingAnyReason
     }
+
+    pub fn is_resource_proofing(self) -> bool {
+        self == State::WaitingProofing
+    }
+
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -239,8 +244,11 @@ impl Rpc {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ParsecVote {
     ExpectCandidate(Candidate),
+
     Online(Candidate),
     PurgeCandidate(Candidate),
+    CheckResourceProof,
+
     AddElderNode(Node),
     RemoveElderNode(Node),
     NewSectionInfo(SectionInfo),
@@ -272,7 +280,8 @@ impl ParsecVote {
             | ParsecVote::RefuseCandidate(candidate)
             | ParsecVote::RelocateResponse(candidate, _) => Some(*candidate),
 
-            ParsecVote::AddElderNode(_)
+            ParsecVote::CheckResourceProof
+            | ParsecVote::AddElderNode(_)
             | ParsecVote::RemoveElderNode(_)
             | ParsecVote::NewSectionInfo(_)
             | ParsecVote::WorkUnitIncrement
@@ -289,6 +298,7 @@ impl ParsecVote {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LocalEvent {
     TimeoutAccept,
+    CheckResourceProofTimeout,
 
     TimeoutWorkUnit,
     TimeoutCheckRelocate,
