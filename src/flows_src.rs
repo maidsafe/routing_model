@@ -138,7 +138,7 @@ impl StartRelocateSrc {
             }
             ParsecVote::RelocatedInfo(info) => Some(
                 self.send_candidate_relocated_info_rpc(info)
-                    .purge_node_info(info.candidate),
+                    .purge_node_info(info),
             ),
             // Delegate to other event loops
             _ => None,
@@ -225,8 +225,8 @@ impl StartRelocateSrc {
         self.clone()
     }
 
-    fn purge_node_info(&self, candidate: Candidate) -> Self {
-        self.0.action.remove_node(candidate);
+    fn purge_node_info(&self, info: RelocatedInfo) -> Self {
+        self.0.action.purge_node_info(info.candidate.name());
         self.clone()
     }
 

@@ -52,7 +52,7 @@ pub enum NodeChange {
     AddWithState(Node, State),
     ReplaceWith(Name, Node, State),
     State(Node, State),
-    Remove(Node),
+    Remove(Name),
     Elder(Node, bool),
 }
 
@@ -75,8 +75,12 @@ impl RelocatedInfo {
 pub enum State {
     // Online ordered first Online node are chosen for elder
     Online,
-    // Relocating
-    RelocatingAnyReason,
+    // Relocating an adult that has reached its work unit count
+    RelocatingAgeIncrease,
+    // Relocating to a new hop with a shorter section
+    RelocatingHop,
+    // Relocating back online node
+    RelocatingBackOnline,
     // Complete relocation, only waiting for info to be processed
     Relocated(RelocatedInfo),
     // Not a full adult/Not known pubilc id: still wait candidate info / connection
@@ -89,7 +93,9 @@ pub enum State {
 
 impl State {
     pub fn is_relocating(self) -> bool {
-        self == State::RelocatingAnyReason
+        self == State::RelocatingAgeIncrease
+            || self == State::RelocatingHop
+            || self == State::RelocatingBackOnline
     }
     pub fn is_resource_proofing(self) -> bool {
         self == State::WaitingProofing
@@ -104,7 +110,7 @@ impl State {
 
     pub fn is_not_yet_full_node(self) -> bool {
         match self {
-            State::WaitingCandidateInfo(_) | State::WaitingProofing => true,
+            State::WaitingCandidateInfo(_) | State::WaitingProofing | State::RelocatingHop => true,
             _ => false,
         }
     }
@@ -213,7 +219,8 @@ pub enum Rpc {
     RelocatedInfo(RelocatedInfo),
 
     ExpectCandidate(Candidate),
-    ResendExpectCandidate(Section, Candidate),
+
+    NodeConnected(Candidate, GenesisPfxInfo),
 
     ResourceProof {
         candidate: Candidate,
@@ -258,7 +265,7 @@ impl Rpc {
             | Rpc::RelocateResponse(_)
             | Rpc::RelocatedInfo(_)
             | Rpc::ExpectCandidate(_)
-            | Rpc::ResendExpectCandidate(_, _)
+            | Rpc::NodeConnected(_, _)
             | Rpc::NodeApproval(_, _)
             | Rpc::Merge => None,
 
@@ -278,6 +285,7 @@ impl Rpc {
 pub enum ParsecVote {
     ExpectCandidate(Candidate),
 
+    CheckRelocatedNodeConnection,
     CandidateConnected(CandidateInfo),
 
     Online(Candidate),
@@ -315,7 +323,8 @@ impl ParsecVote {
             | ParsecVote::RefuseCandidate(candidate)
             | ParsecVote::RelocateResponse(RelocatedInfo { candidate, .. }) => Some(*candidate),
 
-            ParsecVote::CandidateConnected(_)
+            ParsecVote::CheckRelocatedNodeConnection
+            | ParsecVote::CandidateConnected(_)
             | ParsecVote::CheckResourceProof
             | ParsecVote::AddElderNode(_)
             | ParsecVote::RemoveElderNode(_)
@@ -333,6 +342,7 @@ impl ParsecVote {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LocalEvent {
+    CheckRelocatedNodeConnectionTimeout,
     TimeoutAccept,
     CheckResourceProofTimeout,
 
@@ -345,6 +355,11 @@ pub enum LocalEvent {
     ComputeResourceProofForElder(Name, ProofSource),
     NodeDetectedOffline(Node),
     NodeDetectedBackOnline(Node),
+
+    // Event that should be handled by a flow but are not.
+    NotYetImplementedEvent,
+    // Unexpected event ignored:
+    UnexpectedEventIgnored,
 }
 
 impl LocalEvent {

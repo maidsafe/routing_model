@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::{actions::*, flows_dst::*, flows_node::*, flows_src::*, utilities::*};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct ProcessElderChangeState {
@@ -33,11 +33,12 @@ pub struct StartRelocateSrcState {
     pub already_relocating: BTreeMap<Candidate, i32>,
 }
 
-// #[derive(Debug, PartialEq, Default, Clone)]
-// pub struct StartRelocatedNodeConnectionState {
-//     pub candidates_info: BTreeMap<Name, CandidateInfo>,
-//     pub candidates_voted: BTreeSet<Name>,
-// }
+#[derive(Debug, PartialEq, Default, Clone)]
+pub struct StartRelocatedNodeConnectionState {
+    pub candidates: BTreeSet<Name>,
+    pub candidates_info: BTreeMap<Name, CandidateInfo>,
+    pub candidates_voted: BTreeSet<Name>,
+}
 
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct SrcRoutineState {}
@@ -50,6 +51,7 @@ pub struct MemberState {
     pub sub_routine_accept_as_candidate: AcceptAsCandidateState,
     pub src_routine: SrcRoutineState,
     pub start_relocate_src: StartRelocateSrcState,
+    pub start_relocated_node_connection_state: StartRelocatedNodeConnectionState,
     pub check_and_process_elder_change_routine: CheckAndProcessElderChangeState,
 }
 
@@ -94,12 +96,21 @@ impl MemberState {
         }
 
         match event {
+            Event::Rpc(Rpc::ConnectionInfoResponse { .. }) => {
+                self.action
+                    .schedule_event(LocalEvent::NotYetImplementedEvent);
+                Some(self.clone())
+            }
             // These should only happen if a routine started them, so it should have
             // handled them too, but other routine are not there yet and we want to test
             // these do not fail.
             Event::ParsecConsensus(ParsecVote::RemoveElderNode(_))
             | Event::ParsecConsensus(ParsecVote::AddElderNode(_))
-            | Event::ParsecConsensus(ParsecVote::NewSectionInfo(_)) => Some(self.clone()),
+            | Event::ParsecConsensus(ParsecVote::NewSectionInfo(_)) => {
+                self.action
+                    .schedule_event(LocalEvent::UnexpectedEventIgnored);
+                Some(self.clone())
+            }
 
             _ => None,
         }
