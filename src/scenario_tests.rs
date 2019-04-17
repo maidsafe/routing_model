@@ -10,8 +10,8 @@ use crate::{
     actions::*,
     state::*,
     utilities::{
-        Attributes, Candidate, CandidateInfo, ChangeElder, Event, GenesisPfxInfo, LocalEvent, MergeInfo, Name, Node,
-        NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource, RelocatedInfo, Rpc,
+        Attributes, Candidate, CandidateInfo, ChangeElder, Event, GenesisPfxInfo, LocalEvent, MergeInfo, Name,
+        Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource, RelocatedInfo, Rpc,
         Section, SectionInfo, State,
     },
 };
@@ -265,29 +265,11 @@ mod dst_tests {
             &initial_state,
             &[CANDIDATE_INFO_VALID_RPC_1.to_event()],
             &AssertState {
-                action_our_votes: vec![CANDIDATE_INFO_VALID_PARSEC_VOTE_1],
-                ..AssertState::default()
-            },
-        );
-    }
-
-    #[test]
-    fn parsec_expect_candidate_then_parsec_candidate_info() {
-        let initial_state = arrange_initial_state(
-            &initial_state_old_elders(),
-            &[
-                ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
-                ParsecVote::CheckResourceProof.to_event(),
-            ],
-        );
-
-        run_test(
-            "Get Parsec ExpectCandidate then Purge",
-            &initial_state,
-            &[CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event()],
-            &AssertState {
-                action_our_nodes: vec![NodeChange::State(NODE_1, State::WaitingProofing)],
-                //action_our_votes: vec![CANDIDATE_INFO_VALID_PARSEC_VOTE_1],
+                action_our_rpcs: vec![Rpc::ConnectionInfoRequest {
+                    source: OUR_NAME,
+                    destination: CANDIDATE_1.name(),
+                    connection_info: OUR_NAME.0,
+                }],
                 ..AssertState::default()
             },
         );
@@ -314,11 +296,7 @@ mod dst_tests {
                     source: OUR_NAME,
                     proof: OUR_PROOF_REQUEST,
                 }],
-                action_our_votes: vec![ParsecVote::CandidateInfo(CandidateInfo {
-                    candidate: CANDIDATE_1,
-                    destination: Name(132),
-                    valid: true,
-                })],
+                action_our_votes: vec![CANDIDATE_INFO_VALID_PARSEC_VOTE_1],
                 ..AssertState::default()
             },
         );
@@ -339,8 +317,29 @@ mod dst_tests {
             &initial_state,
             &[CANDIDATE_INFO_VALID_RPC_1.to_event()],
             &AssertState {
-                // Not right but diagram allow it.
-                action_our_votes: vec![CANDIDATE_INFO_VALID_PARSEC_VOTE_1],
+                action_our_rpcs: vec![Rpc::ConnectionInfoRequest {
+                    source: OUR_NAME,
+                    destination: CANDIDATE_1.name(),
+                    connection_info: OUR_NAME.0,
+                }],
+                ..AssertState::default()
+            },
+        );
+    }
+
+    #[test]
+    fn parsec_expect_candidate_then_parsec_candidate_info() {
+        let initial_state = arrange_initial_state(
+            &initial_state_old_elders(),
+            &[ParsecVote::ExpectCandidate(CANDIDATE_1).to_event()],
+        );
+
+        run_test(
+            "Get Parsec ExpectCandidate then Purge",
+            &initial_state,
+            &[CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event()],
+            &AssertState {
+                action_our_nodes: vec![NodeChange::State(NODE_1, State::WaitingProofing)],
                 ..AssertState::default()
             },
         );

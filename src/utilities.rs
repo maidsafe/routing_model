@@ -64,10 +64,8 @@ pub enum State {
     RelocatingAnyReason,
     // Complete relocation, only waiting for info to be processed
     Relocated(RelocatedInfo),
-    // Not a full adult/Not known pubilc id: still wait candidate info
+    // Not a full adult/Not known pubilc id: still wait candidate info / connection
     WaitingCandidateInfo,
-    // Not a full adult/still communicate using proxy: still wait for connection
-    WaitingConnectionInfo,
     // Not a full adult: still wait proofing
     WaitingProofing,
     // When a node that was previous online lost connection
@@ -86,15 +84,9 @@ impl State {
         self == State::WaitingCandidateInfo
     }
 
-    pub fn is_waiting_connection_info(self) -> bool {
-        self == State::WaitingConnectionInfo
-    }
-
     pub fn is_not_yet_full_node(self) -> bool {
         match self {
-            State::WaitingCandidateInfo | State::WaitingConnectionInfo | State::WaitingProofing => {
-                true
-            }
+            State::WaitingCandidateInfo | State::WaitingProofing => true,
             _ => false,
         }
     }

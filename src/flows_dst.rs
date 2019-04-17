@@ -114,7 +114,7 @@ impl StartRelocatedNodeConnection {
 
     fn try_rpc(&self, rpc: Rpc) -> Option<Self> {
         match rpc {
-            Rpc::CandidateInfo(info) => self.try_rpc_info(info),
+            Rpc::CandidateInfo(info) => Some(self.rpc_info(info)),
             _ => None,
         }
     }
@@ -128,14 +128,12 @@ impl StartRelocatedNodeConnection {
         }
     }
 
-    fn try_rpc_info(&self, info: CandidateInfo) -> Option<Self> {
-        Some(if self.0.action.is_valid_waited_info(info) {
-            self.vote_parsec_candidate_info(info)
-        } else if self.0.action.is_valid_waited_connection(info) {
-            self.send_rpc_connection_info_request(info.candidate)
+    fn rpc_info(&self, info: CandidateInfo) -> Self {
+        if self.0.action.is_valid_waited_info(info) {
+            self.store_candidate_info_and_send_connect_info(info)
         } else {
             self.discard()
-        })
+        }
     }
 
     fn update_to_node_waiting_proof(&self, info: CandidateInfo) -> Self {
@@ -149,11 +147,14 @@ impl StartRelocatedNodeConnection {
         self.clone()
     }
 
-    fn send_rpc_connection_info_request(&self, candidate: Candidate) -> Self {
-        self.0.action.send_connection_info_request(candidate.name());
+    fn store_candidate_info_and_send_connect_info(&self, info: CandidateInfo) -> Self {
+        self.0
+            .action
+            .send_connection_info_request(info.candidate.name());
         self.clone()
     }
 
+    #[allow(dead_code)]
     fn vote_parsec_candidate_info(&self, info: CandidateInfo) -> Self {
         self.0.action.vote_parsec(ParsecVote::CandidateInfo(info));
         self.clone()

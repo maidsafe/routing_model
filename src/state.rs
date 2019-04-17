@@ -33,6 +33,11 @@ pub struct StartRelocateSrcState {
     pub already_relocating: BTreeMap<Candidate, i32>,
 }
 
+// #[derive(Debug, PartialEq, Default, Clone)]
+// pub struct StartRelocatedNodeConnectionState {
+//     pub candidates_info: BTreeMap<Candidate, i32>,
+// }
+
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct SrcRoutineState {}
 

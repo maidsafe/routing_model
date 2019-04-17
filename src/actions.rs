@@ -353,19 +353,6 @@ impl Action {
             .unwrap_or(false)
     }
 
-    pub fn is_valid_waited_connection(&self, info: CandidateInfo) -> bool {
-        if !info.valid {
-            return false;
-        }
-
-        self.0
-            .borrow()
-            .our_current_nodes
-            .get(&Name(info.candidate.0.name))
-            .map(|state| state.state.is_waiting_connection_info())
-            .unwrap_or(false)
-    }
-
     pub fn is_our_name(&self, name: Name) -> bool {
         self.our_name() == name
     }
