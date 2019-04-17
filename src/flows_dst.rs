@@ -12,8 +12,8 @@ use crate::{
         StartRelocatedNodeConnectionState,
     },
     utilities::{
-        Candidate, CandidateInfo, ChangeElder, Event, LocalEvent, Name, MergeInfo, Node, ParsecVote, Proof,
-        RelocatedInfo, Rpc,
+        Candidate, CandidateInfo, ChangeElder, Event, LocalEvent, MergeInfo, Name, Node,
+        ParsecVote, Proof, RelocatedInfo, Rpc,
     },
 };
 use unwrap::unwrap;
@@ -155,18 +155,19 @@ impl StartRelocatedNodeConnection {
     }
 
     fn rpc_info(&self, info: CandidateInfo) -> Self {
-        match self.0.action.is_valid_waited_info(info) {
-            true => self.cache_candidate_info_and_send_connect_info(info),
-            false => self.discard(),
+        if self.0.action.is_valid_waited_info(info) {
+            self.cache_candidate_info_and_send_connect_info(info)
+        } else {
+            self.discard()
         }
     }
 
     fn check_candidate_connnected(&self, info: CandidateInfo) -> Self {
-        match self.0.action.is_valid_waited_info(info) {
-            false => self.discard(),
-            true => self
-                .check_update_to_node(info)
-                .send_node_connected_rpc(info),
+        if self.0.action.is_valid_waited_info(info) {
+            self.check_update_to_node(info)
+                .send_node_connected_rpc(info)
+        } else {
+            self.discard()
         }
     }
 
@@ -402,9 +403,10 @@ impl StartResourceProof {
     }
 
     fn check_request_resource_proof(&self) -> Self {
-        match self.has_candidate() {
-            true => self.send_resource_proof_rpc(),
-            false => self.finish_resource_proof(),
+        if self.has_candidate() {
+            self.send_resource_proof_rpc()
+        } else {
+            self.finish_resource_proof()
         }
     }
 

@@ -7,9 +7,9 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::utilities::{
-    Age, Attributes, Candidate, CandidateInfo, ChangeElder, GenesisPfxInfo, MergeInfo, LocalEvent, Name, Node,
-    NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource, RelocatedInfo, Rpc,
-    Section, SectionInfo, State,
+    Age, Attributes, Candidate, CandidateInfo, ChangeElder, GenesisPfxInfo, LocalEvent, MergeInfo,
+    Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource, RelocatedInfo,
+    Rpc, Section, SectionInfo, State,
 };
 use itertools::Itertools;
 use std::{
@@ -199,9 +199,9 @@ impl Action {
         self.0.borrow_mut().next_target_interval.0 += 1;
 
         let info = RelocatedInfo {
-            candidate: candidate,
+            candidate,
             expected_age: Age(candidate.0.age + 1),
-            target_interval_center: target_interval_center,
+            target_interval_center,
             section_info: self.0.borrow().our_section,
         };
 
@@ -229,7 +229,7 @@ impl Action {
     fn update_to_node(&self, info: CandidateInfo, state: State) {
         let state = NodeState {
             node: Node(info.new_public_id.0),
-            state: state,
+            state,
             ..NodeState::default()
         };
 
