@@ -10,9 +10,9 @@ use crate::{
     actions::*,
     state::*,
     utilities::{
-        Attributes, Candidate, ChangeElder, Event, GenesisPfxInfo, LocalEvent, MergeInfo, Name,
-        Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource, RelocatedInfo,
-        Rpc, Section, SectionInfo, State,
+        Attributes, Candidate, CandidateInfo, ChangeElder, Event, GenesisPfxInfo, LocalEvent, MergeInfo, Name, Node,
+        NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource, RelocatedInfo, Rpc,
+        Section, SectionInfo, State,
     },
 };
 use lazy_static::lazy_static;
@@ -36,18 +36,10 @@ const OTHER_SECTION_1: Section = Section(1);
 const DST_SECTION_200: Section = Section(200);
 
 const NODE_1: Node = Node(Attributes { name: 1, age: 10 });
-const ADD_PROOFING_NODE_1: NodeChange = NodeChange::AddWithState(
-    Node(Attributes { name: 1, age: 10 }),
-    State::WaitingProofing,
-);
+const NODE_2: Node = Node(Attributes { name: 2, age: 10 });
 const SET_ONLINE_NODE_1: NodeChange =
     NodeChange::State(Node(Attributes { name: 1, age: 10 }), State::Online);
 const REMOVE_NODE_1: NodeChange = NodeChange::Remove(Node(Attributes { name: 1, age: 10 }));
-
-const ADD_PROOFING_NODE_2: NodeChange = NodeChange::AddWithState(
-    Node(Attributes { name: 2, age: 10 }),
-    State::WaitingProofing,
-);
 
 const NODE_ELDER_109: Node = Node(Attributes { name: 109, age: 9 });
 const NODE_ELDER_110: Node = Node(Attributes { name: 110, age: 10 });
@@ -65,11 +57,16 @@ const SECTION_INFO_1: SectionInfo = SectionInfo(OUR_SECTION, 1);
 const SECTION_INFO_2: SectionInfo = SectionInfo(OUR_SECTION, 2);
 const DST_SECTION_INFO_200: SectionInfo = SectionInfo(DST_SECTION_200, 0);
 
-const CANDIDATE_INFO_VALID_RPC_1: Rpc = Rpc::CandidateInfo {
+const CANDIDATE_INFO_VALID_1: CandidateInfo = CandidateInfo {
     candidate: CANDIDATE_1,
     destination: OUR_NAME,
     valid: true,
 };
+
+const CANDIDATE_INFO_VALID_RPC_1: Rpc = Rpc::CandidateInfo(CANDIDATE_INFO_VALID_1);
+const CANDIDATE_INFO_VALID_PARSEC_VOTE_1: ParsecVote =
+    ParsecVote::CandidateInfo(CANDIDATE_INFO_VALID_1);
+
 const OUR_SECTION: Section = Section(0);
 const OUR_NODE: Node = NODE_ELDER_132;
 const OUR_NAME: Name = Name(OUR_NODE.0.name);
@@ -243,7 +240,10 @@ mod dst_tests {
                 ParsecVote::CheckResourceProof.to_event(),
             ],
             &AssertState {
-                action_our_nodes: vec![ADD_PROOFING_NODE_1],
+                action_our_nodes: vec![NodeChange::AddWithState(
+                    NODE_1,
+                    State::WaitingCandidateInfo,
+                )],
                 action_our_rpcs: vec![Rpc::RelocateResponse(CANDIDATE_1, OUR_INITIAL_SECTION_INFO)],
                 ..AssertState::default()
             },
@@ -265,11 +265,60 @@ mod dst_tests {
             &initial_state,
             &[CANDIDATE_INFO_VALID_RPC_1.to_event()],
             &AssertState {
+                action_our_votes: vec![CANDIDATE_INFO_VALID_PARSEC_VOTE_1],
+                ..AssertState::default()
+            },
+        );
+    }
+
+    #[test]
+    fn parsec_expect_candidate_then_parsec_candidate_info() {
+        let initial_state = arrange_initial_state(
+            &initial_state_old_elders(),
+            &[
+                ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
+            ],
+        );
+
+        run_test(
+            "Get Parsec ExpectCandidate then Purge",
+            &initial_state,
+            &[CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event()],
+            &AssertState {
+                action_our_nodes: vec![NodeChange::State(NODE_1, State::WaitingProofing)],
+                //action_our_votes: vec![CANDIDATE_INFO_VALID_PARSEC_VOTE_1],
+                ..AssertState::default()
+            },
+        );
+    }
+
+    // TODO - remove the `allow` once we have a test for this method.
+    #[allow(dead_code)]
+    fn parsec_expect_candidate_then_candidate_info_2() {
+        let initial_state = arrange_initial_state(
+            &initial_state_old_elders(),
+            &[
+                ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
+            ],
+        );
+
+        run_test(
+            "Get Parsec ExpectCandidate then Purge",
+            &initial_state,
+            &[CANDIDATE_INFO_VALID_RPC_1.to_event()],
+            &AssertState {
                 action_our_rpcs: vec![Rpc::ResourceProof {
                     candidate: CANDIDATE_1,
                     source: OUR_NAME,
                     proof: OUR_PROOF_REQUEST,
                 }],
+                action_our_votes: vec![ParsecVote::CandidateInfo(CandidateInfo {
+                    candidate: CANDIDATE_1,
+                    destination: Name(132),
+                    valid: true,
+                })],
                 ..AssertState::default()
             },
         );
@@ -281,8 +330,29 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
-                ParsecVote::CheckResourceProof.to_event(),
                 CANDIDATE_INFO_VALID_RPC_1.to_event(),
+            ],
+        );
+
+        run_test(
+            "Get Parsec ExpectCandidate then Purge",
+            &initial_state,
+            &[CANDIDATE_INFO_VALID_RPC_1.to_event()],
+            &AssertState {
+                // Not right but diagram allow it.
+                action_our_votes: vec![CANDIDATE_INFO_VALID_PARSEC_VOTE_1],
+                ..AssertState::default()
+            },
+        );
+    }
+
+    #[test]
+    fn parsec_expect_candidate_then_candidate_info_after_parsec_candidate_info() {
+        let initial_state = arrange_initial_state(
+            &initial_state_old_elders(),
+            &[
+                ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
             ],
         );
 
@@ -300,23 +370,20 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
-                ParsecVote::CheckResourceProof.to_event(),
+                //ParsecVote::CheckResourceProof.to_event(),
             ],
         );
 
         run_test(
             "Get Parsec ExpectCandidate then Purge",
             &initial_state,
-            &[Rpc::CandidateInfo {
+            &[Rpc::CandidateInfo(CandidateInfo {
                 candidate: CANDIDATE_1,
                 destination: OUR_NAME,
                 valid: false,
-            }
+            })
             .to_event()],
-            &AssertState {
-                action_our_votes: vec![ParsecVote::PurgeCandidate(CANDIDATE_1)],
-                ..AssertState::default()
-            },
+            &AssertState::default(),
         );
     }
 
@@ -326,6 +393,7 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
             ],
         );
@@ -354,11 +422,11 @@ mod dst_tests {
         run_test(
             "Get Parsec ExpectCandidate then Purge",
             &initial_state,
-            &[Rpc::CandidateInfo {
+            &[Rpc::CandidateInfo(CandidateInfo {
                 candidate: CANDIDATE_2,
                 destination: OUR_NAME,
                 valid: true,
-            }
+            })
             .to_event()],
             &AssertState::default(),
         );
@@ -370,8 +438,8 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
-                CANDIDATE_INFO_VALID_RPC_1.to_event(),
             ],
         );
 
@@ -400,8 +468,8 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
-                CANDIDATE_INFO_VALID_RPC_1.to_event(),
             ],
         );
 
@@ -427,8 +495,8 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
-                CANDIDATE_INFO_VALID_RPC_1.to_event(),
                 Rpc::ResourceProofResponse {
                     candidate: CANDIDATE_1,
                     destination: OUR_NAME,
@@ -457,8 +525,8 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
-                CANDIDATE_INFO_VALID_RPC_1.to_event(),
             ],
         );
 
@@ -481,8 +549,8 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
-                CANDIDATE_INFO_VALID_RPC_1.to_event(),
             ],
         );
 
@@ -505,6 +573,7 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
             ],
         );
@@ -593,6 +662,7 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
             ],
         );
@@ -619,6 +689,7 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
             ],
         );
@@ -652,6 +723,7 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
                 ParsecVote::Online(CANDIDATE_1).to_event(),
                 ParsecVote::CheckElder.to_event(),
@@ -686,6 +758,7 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
                 ParsecVote::Online(CANDIDATE_1).to_event(),
                 ParsecVote::CheckElder.to_event(),
@@ -718,6 +791,7 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
                 ParsecVote::Online(CANDIDATE_1).to_event(),
                 ParsecVote::CheckElder.to_event(),
@@ -751,6 +825,7 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
                 ParsecVote::Online(CANDIDATE_1).to_event(),
                 ParsecVote::CheckElder.to_event(),
@@ -770,7 +845,10 @@ mod dst_tests {
             ],
             &&AssertState {
                 action_our_section: SECTION_INFO_1,
-                action_our_nodes: vec![ADD_PROOFING_NODE_2],
+                action_our_nodes: vec![NodeChange::AddWithState(
+                    NODE_2,
+                    State::WaitingCandidateInfo,
+                )],
                 action_our_rpcs: vec![Rpc::RelocateResponse(CANDIDATE_2, OUR_NEXT_SECTION_INFO)],
                 ..AssertState::default()
             },
@@ -783,6 +861,7 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
             ],
         );
@@ -804,6 +883,7 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1).to_event(),
+                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
             ],
         );
@@ -864,11 +944,11 @@ mod dst_tests {
              Candidate RPC may arrive after candidate was purged or accepted",
             &initial_state_old_elders(),
             &[
-                Rpc::CandidateInfo {
+                Rpc::CandidateInfo(CandidateInfo {
                     candidate: CANDIDATE_1,
                     destination: OUR_NAME,
                     valid: true,
-                }
+                })
                 .to_event(),
                 Rpc::ResourceProofResponse {
                     candidate: CANDIDATE_1,
@@ -1507,16 +1587,16 @@ mod node_tests {
             ],
             &AssertJoiningState {
                 action_our_rpcs: vec![
-                    Rpc::CandidateInfo {
+                    Rpc::CandidateInfo(CandidateInfo {
                         candidate: OUR_NODE_CANDIDATE,
                         destination: NAME_110,
                         valid: true,
-                    },
-                    Rpc::CandidateInfo {
+                    }),
+                    Rpc::CandidateInfo(CandidateInfo {
                         candidate: OUR_NODE_CANDIDATE,
                         destination: NAME_111,
                         valid: true,
-                    },
+                    }),
                 ],
                 join_routine: JoiningRelocateCandidateState {
                     has_resource_proofs: to_collect![

@@ -75,6 +75,10 @@ impl MemberState {
             return Some(next);
         }
 
+        if let Some(next) = self.as_start_relocated_node_connection().try_next(event) {
+            return Some(next);
+        }
+
         if let Some(next) = self.as_start_resource_proof().try_next(event) {
             return Some(next);
         }
@@ -97,6 +101,10 @@ impl MemberState {
 
     pub fn as_top_level_dst(&self) -> TopLevelDst {
         TopLevelDst(self.clone())
+    }
+
+    pub fn as_start_relocated_node_connection(&self) -> StartRelocatedNodeConnection {
+        StartRelocatedNodeConnection(self.clone())
     }
 
     pub fn as_start_resource_proof(&self) -> StartResourceProof {

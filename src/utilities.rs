@@ -64,6 +64,10 @@ pub enum State {
     RelocatingAnyReason,
     // Complete relocation, only waiting for info to be processed
     Relocated(RelocatedInfo),
+    // Not a full adult/Not known pubilc id: still wait candidate info
+    WaitingCandidateInfo,
+    // Not a full adult/still communicate using proxy: still wait for connection
+    WaitingConnectionInfo,
     // Not a full adult: still wait proofing
     WaitingProofing,
     // When a node that was previous online lost connection
@@ -74,11 +78,26 @@ impl State {
     pub fn is_relocating(self) -> bool {
         self == State::RelocatingAnyReason
     }
-
     pub fn is_resource_proofing(self) -> bool {
         self == State::WaitingProofing
     }
 
+    pub fn is_waiting_candidate_info(self) -> bool {
+        self == State::WaitingCandidateInfo
+    }
+
+    pub fn is_waiting_connection_info(self) -> bool {
+        self == State::WaitingConnectionInfo
+    }
+
+    pub fn is_not_yet_full_node(self) -> bool {
+        match self {
+            State::WaitingCandidateInfo | State::WaitingConnectionInfo | State::WaitingProofing => {
+                true
+            }
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -163,6 +182,13 @@ impl ProofSource {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CandidateInfo {
+    pub candidate: Candidate,
+    pub destination: Name,
+    pub valid: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Event {
     Rpc(Rpc),
     ParsecConsensus(ParsecVote),
@@ -194,11 +220,7 @@ pub enum Rpc {
         destination: Name,
         proof: Proof,
     },
-    CandidateInfo {
-        candidate: Candidate,
-        destination: Name,
-        valid: bool,
-    },
+    CandidateInfo(CandidateInfo),
 
     ConnectionInfoRequest {
         source: Name,
@@ -234,7 +256,7 @@ impl Rpc {
             }
 
             Rpc::ResourceProofResponse { destination, .. }
-            | Rpc::CandidateInfo { destination, .. }
+            | Rpc::CandidateInfo(CandidateInfo { destination, .. })
             | Rpc::ConnectionInfoRequest { destination, .. }
             | Rpc::ConnectionInfoResponse { destination, .. } => Some(*destination),
         }
@@ -244,6 +266,8 @@ impl Rpc {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ParsecVote {
     ExpectCandidate(Candidate),
+
+    CandidateInfo(CandidateInfo),
 
     Online(Candidate),
     PurgeCandidate(Candidate),
@@ -280,7 +304,8 @@ impl ParsecVote {
             | ParsecVote::RefuseCandidate(candidate)
             | ParsecVote::RelocateResponse(candidate, _) => Some(*candidate),
 
-            ParsecVote::CheckResourceProof
+            ParsecVote::CandidateInfo(_)
+            | ParsecVote::CheckResourceProof
             | ParsecVote::AddElderNode(_)
             | ParsecVote::RemoveElderNode(_)
             | ParsecVote::NewSectionInfo(_)

@@ -8,9 +8,7 @@
 
 use crate::{
     state::{AcceptAsCandidateState, MemberState, ProcessElderChangeState},
-    utilities::{
-        Candidate, ChangeElder, Event, LocalEvent, MergeInfo, Node, ParsecVote, Proof, Rpc, Section,
-    },
+    utilities::{Candidate, CandidateInfo, ChangeElder, Event, LocalEvent, MergeInfo, Node, ParsecVote, Proof, Rpc, Section},
 };
 use unwrap::unwrap;
 
@@ -57,14 +55,14 @@ impl TopLevelDst {
             (_, _, Some(section)) => Some(self.resend_expect_candidate_rpc(candidate, section)),
             (_, false, None) => Some(self.send_refuse_candidate_rpc(candidate)),
             (_, true, None) => Some(
-                self.add_node_ressource_proofing(candidate)
+                self.add_node_waiting_candidate_info(candidate)
                     .send_relocate_response_rpc(candidate),
             ),
         }
     }
 
-    fn add_node_ressource_proofing(&self, candidate: Candidate) -> Self {
-        self.0.action.add_node_resource_proofing(candidate);
+    fn add_node_waiting_candidate_info(&self, candidate: Candidate) -> Self {
+        self.0.action.add_node_waiting_candidate_info(candidate);
         self.clone()
     }
 
@@ -84,10 +82,80 @@ impl TopLevelDst {
             .vote_parsec(ParsecVote::ExpectCandidate(candidate));
         self.clone()
     }
+
     fn resend_expect_candidate_rpc(&self, candidate: Candidate, section: Section) -> Self {
         self.0
             .action
             .send_rpc(Rpc::ResendExpectCandidate(section, candidate));
+        self.clone()
+    }
+}
+
+#[derive(Debug, PartialEq, Default, Clone)]
+pub struct StartRelocatedNodeConnection(pub MemberState);
+
+impl StartRelocatedNodeConnection {
+    // TODO - remove the `allow` once we have a test for this method.
+    #[allow(dead_code)]
+    fn start_event_loop(&self) -> Self {
+        self.clone()
+    }
+
+    pub fn try_next(&self, event: Event) -> Option<MemberState> {
+        match event {
+            Event::Rpc(rpc) => self.try_rpc(rpc),
+            Event::ParsecConsensus(vote) => self.try_consensus(vote),
+            //Event::LocalEvent(local_event) => self.try_local_event(local_event),
+            // Delegate to other event loops
+            _ => None,
+        }
+        .map(|state| state.0)
+    }
+
+    fn try_rpc(&self, rpc: Rpc) -> Option<Self> {
+        match rpc {
+            Rpc::CandidateInfo(info) => self.try_rpc_info(info),
+            _ => None,
+        }
+    }
+
+    fn try_consensus(&self, vote: ParsecVote) -> Option<Self> {
+        match vote {
+            ParsecVote::CandidateInfo(info) => Some(self.update_to_node_waiting_proof(info)),
+
+            // Delegate to other event loops
+            _ => None,
+        }
+    }
+
+    fn try_rpc_info(&self, info: CandidateInfo) -> Option<Self> {
+        Some(if self.0.action.is_valid_waited_info(info) {
+            self.vote_parsec_candidate_info(info)
+        } else if self.0.action.is_valid_waited_connection(info) {
+            self.send_rpc_connection_info_request(info.candidate)
+        } else {
+            self.discard()
+        })
+    }
+
+    fn update_to_node_waiting_proof(&self, info: CandidateInfo) -> Self {
+        self.0
+            .action
+            .set_candidate_waiting_proof_state(info.candidate);
+        self.clone()
+    }
+
+    fn discard(&self) -> Self {
+        self.clone()
+    }
+
+    fn send_rpc_connection_info_request(&self, candidate: Candidate) -> Self {
+        self.0.action.send_connection_info_request(candidate.name());
+        self.clone()
+    }
+
+    fn vote_parsec_candidate_info(&self, info: CandidateInfo) -> Self {
+        self.0.action.vote_parsec(ParsecVote::CandidateInfo(info));
         self.clone()
     }
 }
@@ -100,15 +168,14 @@ impl StartResourceProof {
     // TODO - remove the `allow` once we have a test for this method.
     #[allow(dead_code)]
     fn start_event_loop(&self) -> Self {
-        self.0.action.schedule_event(LocalEvent::CheckResourceProofTimeout);
+        self.0
+            .action
+            .schedule_event(LocalEvent::CheckResourceProofTimeout);
         self.clone()
     }
 
     pub fn try_next(&self, event: Event) -> Option<MemberState> {
         match event {
-            Event::Rpc(Rpc::CandidateInfo {
-                candidate, valid, ..
-            }) => self.try_rpc_info(candidate, valid),
             Event::Rpc(Rpc::ResourceProofResponse {
                 candidate, proof, ..
             }) => self.try_rpc_proof(candidate, proof),
@@ -118,21 +185,6 @@ impl StartResourceProof {
             _ => None,
         }
         .map(|state| state.0)
-    }
-
-    fn try_rpc_info(&self, candidate: Candidate, valid: bool) -> Option<Self> {
-        if !self.has_candidate()
-            || candidate != self.candidate()
-            || self.routine_state().got_candidate_info
-        {
-            return Some(self.discard());
-        }
-
-        Some(if valid {
-            self.set_got_candidate_info(true).send_resource_proof_rpc()
-        } else {
-            self.vote_parsec_purge_candidate()
-        })
     }
 
     fn try_rpc_proof(&self, candidate: Candidate, proof: Proof) -> Option<Self> {
@@ -191,6 +243,8 @@ impl StartResourceProof {
         state
     }
 
+    // TODO - remove the `allow` once we have a test for this method.
+    #[allow(dead_code)]
     fn set_got_candidate_info(&self, value: bool) -> Self {
         let mut state = self.clone();
         state.mut_routine_state().got_candidate_info = value;
@@ -241,6 +295,8 @@ impl StartResourceProof {
         state
     }
 
+    // TODO - remove the `allow` once we have a test for this method.
+    #[allow(dead_code)]
     fn send_resource_proof_rpc(&self) -> Self {
         self.0.action.send_candidate_proof_request(self.candidate());
         self.clone()

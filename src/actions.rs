@@ -7,9 +7,9 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::utilities::{
-    Attributes, Candidate, ChangeElder, GenesisPfxInfo, LocalEvent, MergeInfo, Name, Node,
-    NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource, RelocatedInfo, Rpc,
-    Section, SectionInfo, State,
+    Attributes, Candidate, CandidateInfo, ChangeElder, GenesisPfxInfo, LocalEvent, MergeInfo, Name, Node, NodeChange,
+    NodeState, ParsecVote, Proof, ProofRequest, ProofSource, RelocatedInfo, Rpc, Section,
+    SectionInfo, State,
 };
 use itertools::Itertools;
 use std::{
@@ -162,13 +162,19 @@ impl Action {
         self.0.borrow_mut().our_events.push(event);
     }
 
-    pub fn add_node_resource_proofing(&self, candidate: Candidate) {
+    pub fn add_node_waiting_candidate_info(&self, candidate: Candidate) {
         let state = NodeState {
             node: Node(candidate.0),
-            state: State::WaitingProofing,
+            state: State::WaitingCandidateInfo,
             ..NodeState::default()
         };
         self.0.borrow_mut().add_node(state);
+    }
+
+    pub fn set_candidate_waiting_proof_state(&self, candidate: Candidate) {
+        self.0
+            .borrow_mut()
+            .set_node_state(candidate.name(), State::WaitingProofing);
     }
 
     pub fn set_candidate_online_state(&self, candidate: Candidate) {
@@ -319,7 +325,7 @@ impl Action {
             .borrow()
             .our_current_nodes
             .values()
-            .filter(|state| state.state.is_resource_proofing())
+            .filter(|state| state.state.is_not_yet_full_node())
             .map(|state| state.node)
             .collect()
     }
@@ -332,6 +338,32 @@ impl Action {
             .filter(|state| state.state.is_resource_proofing())
             .map(|state| Candidate(state.node.0))
             .next()
+    }
+
+    pub fn is_valid_waited_info(&self, info: CandidateInfo) -> bool {
+        if !info.valid {
+            return false;
+        }
+
+        self.0
+            .borrow()
+            .our_current_nodes
+            .get(&Name(info.candidate.0.name))
+            .map(|state| state.state.is_waiting_candidate_info())
+            .unwrap_or(false)
+    }
+
+    pub fn is_valid_waited_connection(&self, info: CandidateInfo) -> bool {
+        if !info.valid {
+            return false;
+        }
+
+        self.0
+            .borrow()
+            .our_current_nodes
+            .get(&Name(info.candidate.0.name))
+            .map(|state| state.state.is_waiting_connection_info())
+            .unwrap_or(false)
     }
 
     pub fn is_our_name(&self, name: Name) -> bool {
@@ -389,11 +421,11 @@ impl Action {
 
     pub fn send_candidate_info(&self, destination: Name) {
         let candidate = Candidate(self.0.borrow().our_attributes);
-        self.send_rpc(Rpc::CandidateInfo {
+        self.send_rpc(Rpc::CandidateInfo(CandidateInfo {
             candidate,
             destination,
             valid: true,
-        });
+        }));
     }
 
     pub fn send_resource_proof_response(&self, destination: Name, proof: Proof) {
