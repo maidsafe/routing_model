@@ -8,7 +8,7 @@
 
 use crate::{
     state::{MemberState, StartRelocateSrcState},
-    utilities::{Candidate, Event, LocalEvent, ParsecVote, RelocatedInfo, Rpc, SectionInfo},
+    utilities::{Candidate, Event, LocalEvent, ParsecVote, RelocatedInfo, Rpc},
 };
 use unwrap::unwrap;
 
@@ -122,9 +122,7 @@ impl StartRelocateSrc {
     fn try_rpc(&self, rpc: Rpc) -> Option<Self> {
         match rpc {
             Rpc::RefuseCandidate(candidate) => Some(self.vote_parsec_refuse_candidate(candidate)),
-            Rpc::RelocateResponse(candidate, section) => {
-                Some(self.vote_parsec_relocation_response(candidate, section))
-            }
+            Rpc::RelocateResponse(info) => Some(self.vote_parsec_relocation_response(info)),
             _ => None,
         }
     }
@@ -134,7 +132,8 @@ impl StartRelocateSrc {
             ParsecVote::CheckRelocate => {
                 Some(self.check_need_relocate().update_wait_and_allow_resend())
             }
-            ParsecVote::RefuseCandidate(candidate) | ParsecVote::RelocateResponse(candidate, _) => {
+            ParsecVote::RefuseCandidate(candidate)
+            | ParsecVote::RelocateResponse(RelocatedInfo { candidate, .. }) => {
                 Some(self.check_is_our_relocating_node(vote, candidate))
             }
             ParsecVote::RelocatedInfo(info) => Some(
@@ -180,9 +179,7 @@ impl StartRelocateSrc {
         if self.0.action.is_our_relocating_node(candidate) {
             match vote {
                 ParsecVote::RefuseCandidate(candidate) => self.allow_resend(candidate),
-                ParsecVote::RelocateResponse(candidate, section) => {
-                    self.set_relocated_and_prepare_info(candidate, section)
-                }
+                ParsecVote::RelocateResponse(info) => self.set_relocated_and_prepare_info(info),
                 _ => panic!("Unexpected vote"),
             }
         } else {
@@ -199,21 +196,9 @@ impl StartRelocateSrc {
         state
     }
 
-    fn set_relocated_and_prepare_info(
-        &self,
-        candidate: Candidate,
-        section_info: SectionInfo,
-    ) -> Self {
-        let relocated_info = RelocatedInfo {
-            candidate,
-            section_info,
-        };
-        self.0
-            .action
-            .set_candidate_relocated_state(candidate, relocated_info);
-        self.0
-            .action
-            .vote_parsec(ParsecVote::RelocatedInfo(relocated_info));
+    fn set_relocated_and_prepare_info(&self, info: RelocatedInfo) -> Self {
+        self.0.action.set_candidate_relocated_state(info);
+        self.0.action.vote_parsec(ParsecVote::RelocatedInfo(info));
         self.clone()
     }
 
@@ -254,9 +239,7 @@ impl StartRelocateSrc {
     //
 
     fn send_candidate_relocated_info_rpc(&self, info: RelocatedInfo) -> Self {
-        self.0
-            .action
-            .send_rpc(Rpc::RelocatedInfo(info.candidate, info.section_info));
+        self.0.action.send_rpc(Rpc::RelocatedInfo(info));
         self.clone()
     }
 
@@ -276,10 +259,10 @@ impl StartRelocateSrc {
         self.clone()
     }
 
-    fn vote_parsec_relocation_response(&self, candidate: Candidate, section: SectionInfo) -> Self {
+    fn vote_parsec_relocation_response(&self, info: RelocatedInfo) -> Self {
         self.0
             .action
-            .vote_parsec(ParsecVote::RelocateResponse(candidate, section));
+            .vote_parsec(ParsecVote::RelocateResponse(info));
         self.clone()
     }
 }

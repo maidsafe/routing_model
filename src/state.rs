@@ -35,7 +35,8 @@ pub struct StartRelocateSrcState {
 
 // #[derive(Debug, PartialEq, Default, Clone)]
 // pub struct StartRelocatedNodeConnectionState {
-//     pub candidates_info: BTreeMap<Candidate, i32>,
+//     pub candidates_info: BTreeMap<Name, CandidateInfo>,
+//     pub candidates_voted: BTreeSet<Name>,
 // }
 
 #[derive(Debug, PartialEq, Default, Clone)]

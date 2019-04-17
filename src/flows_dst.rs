@@ -54,25 +54,18 @@ impl TopLevelDst {
         ) {
             (_, _, Some(section)) => Some(self.resend_expect_candidate_rpc(candidate, section)),
             (_, false, None) => Some(self.send_refuse_candidate_rpc(candidate)),
-            (_, true, None) => Some(
-                self.add_node_waiting_candidate_info(candidate)
-                    .send_relocate_response_rpc(candidate),
-            ),
+            (_, true, None) => Some(self.add_node_and_send_relocate_response_rpc(candidate)),
         }
     }
 
-    fn add_node_waiting_candidate_info(&self, candidate: Candidate) -> Self {
-        self.0.action.add_node_waiting_candidate_info(candidate);
+    fn add_node_and_send_relocate_response_rpc(&self, candidate: Candidate) -> Self {
+        let relocated_info = self.0.action.add_node_waiting_candidate_info(candidate);
+        self.0.action.send_relocate_response_rpc(relocated_info);
         self.clone()
     }
 
     fn send_refuse_candidate_rpc(&self, candidate: Candidate) -> Self {
         self.0.action.send_rpc(Rpc::RefuseCandidate(candidate));
-        self.clone()
-    }
-
-    fn send_relocate_response_rpc(&self, candidate: Candidate) -> Self {
-        self.0.action.send_relocate_response_rpc(candidate);
         self.clone()
     }
 
@@ -115,13 +108,19 @@ impl StartRelocatedNodeConnection {
     fn try_rpc(&self, rpc: Rpc) -> Option<Self> {
         match rpc {
             Rpc::CandidateInfo(info) => Some(self.rpc_info(info)),
+            //     Rpc::ConnectionInfoResponse{
+            //                 source,
+            // destination,
+            // connection_info} if self.candidate_need_vote(source) => {
+
+            // }
             _ => None,
         }
     }
 
     fn try_consensus(&self, vote: ParsecVote) -> Option<Self> {
         match vote {
-            ParsecVote::CandidateInfo(info) => Some(self.update_to_node_waiting_proof(info)),
+            ParsecVote::CandidateConnected(info) => Some(self.update_to_node_waiting_proof(info)),
 
             // Delegate to other event loops
             _ => None,
@@ -137,9 +136,7 @@ impl StartRelocatedNodeConnection {
     }
 
     fn update_to_node_waiting_proof(&self, info: CandidateInfo) -> Self {
-        self.0
-            .action
-            .set_candidate_waiting_proof_state(info.candidate);
+        self.0.action.set_candidate_waiting_proof_state(info);
         self.clone()
     }
 
@@ -148,15 +145,19 @@ impl StartRelocatedNodeConnection {
     }
 
     fn store_candidate_info_and_send_connect_info(&self, info: CandidateInfo) -> Self {
+        //candidates_info.insert(info.candidate.name())
+
         self.0
             .action
-            .send_connection_info_request(info.candidate.name());
+            .send_connection_info_request(info.new_public_id.name());
         self.clone()
     }
 
     #[allow(dead_code)]
     fn vote_parsec_candidate_info(&self, info: CandidateInfo) -> Self {
-        self.0.action.vote_parsec(ParsecVote::CandidateInfo(info));
+        self.0
+            .action
+            .vote_parsec(ParsecVote::CandidateConnected(info));
         self.clone()
     }
 }

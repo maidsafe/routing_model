@@ -10,7 +10,7 @@
 pub struct Name(pub i32);
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
-pub struct Age(i32);
+pub struct Age(pub i32);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Attributes {
@@ -21,6 +21,11 @@ pub struct Attributes {
 impl Attributes {
     pub fn name(self) -> Name {
         Name(self.name)
+    }
+
+    #[allow(dead_code)]
+    pub fn age(self) -> Age {
+        Age(self.age)
     }
 }
 
@@ -45,6 +50,7 @@ impl Node {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NodeChange {
     AddWithState(Node, State),
+    ReplaceWith(Name, Node, State),
     State(Node, State),
     Remove(Node),
     Elder(Node, bool),
@@ -53,7 +59,16 @@ pub enum NodeChange {
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct RelocatedInfo {
     pub candidate: Candidate,
+    pub expected_age: Age,
+    pub target_interval_center: Name,
     pub section_info: SectionInfo,
+}
+
+impl RelocatedInfo {
+    #[allow(dead_code)]
+    pub fn old_public_id(&self) -> Candidate {
+        self.candidate
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
@@ -65,7 +80,7 @@ pub enum State {
     // Complete relocation, only waiting for info to be processed
     Relocated(RelocatedInfo),
     // Not a full adult/Not known pubilc id: still wait candidate info / connection
-    WaitingCandidateInfo,
+    WaitingCandidateInfo(RelocatedInfo),
     // Not a full adult: still wait proofing
     WaitingProofing,
     // When a node that was previous online lost connection
@@ -81,12 +96,15 @@ impl State {
     }
 
     pub fn is_waiting_candidate_info(self) -> bool {
-        self == State::WaitingCandidateInfo
+        match self {
+            State::WaitingCandidateInfo(_) => true,
+            _ => false,
+        }
     }
 
     pub fn is_not_yet_full_node(self) -> bool {
         match self {
-            State::WaitingCandidateInfo | State::WaitingProofing => true,
+            State::WaitingCandidateInfo(_) | State::WaitingProofing => true,
             _ => false,
         }
     }
@@ -175,7 +193,8 @@ impl ProofSource {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CandidateInfo {
-    pub candidate: Candidate,
+    pub old_public_id: Candidate,
+    pub new_public_id: Candidate,
     pub destination: Name,
     pub valid: bool,
 }
@@ -190,8 +209,8 @@ pub enum Event {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Rpc {
     RefuseCandidate(Candidate),
-    RelocateResponse(Candidate, SectionInfo),
-    RelocatedInfo(Candidate, SectionInfo),
+    RelocateResponse(RelocatedInfo),
+    RelocatedInfo(RelocatedInfo),
 
     ExpectCandidate(Candidate),
     ResendExpectCandidate(Section, Candidate),
@@ -236,8 +255,8 @@ impl Rpc {
     pub fn destination(&self) -> Option<Name> {
         match self {
             Rpc::RefuseCandidate(_)
-            | Rpc::RelocateResponse(_, _)
-            | Rpc::RelocatedInfo(_, _)
+            | Rpc::RelocateResponse(_)
+            | Rpc::RelocatedInfo(_)
             | Rpc::ExpectCandidate(_)
             | Rpc::ResendExpectCandidate(_, _)
             | Rpc::NodeApproval(_, _)
@@ -259,7 +278,7 @@ impl Rpc {
 pub enum ParsecVote {
     ExpectCandidate(Candidate),
 
-    CandidateInfo(CandidateInfo),
+    CandidateConnected(CandidateInfo),
 
     Online(Candidate),
     PurgeCandidate(Candidate),
@@ -272,7 +291,7 @@ pub enum ParsecVote {
     WorkUnitIncrement,
     CheckRelocate,
     RefuseCandidate(Candidate),
-    RelocateResponse(Candidate, SectionInfo),
+    RelocateResponse(RelocatedInfo),
     RelocatedInfo(RelocatedInfo),
 
     CheckElder,
@@ -294,9 +313,9 @@ impl ParsecVote {
             | ParsecVote::Online(candidate)
             | ParsecVote::PurgeCandidate(candidate)
             | ParsecVote::RefuseCandidate(candidate)
-            | ParsecVote::RelocateResponse(candidate, _) => Some(*candidate),
+            | ParsecVote::RelocateResponse(RelocatedInfo { candidate, .. }) => Some(*candidate),
 
-            ParsecVote::CandidateInfo(_)
+            ParsecVote::CandidateConnected(_)
             | ParsecVote::CheckResourceProof
             | ParsecVote::AddElderNode(_)
             | ParsecVote::RemoveElderNode(_)
