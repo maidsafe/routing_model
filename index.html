@@ -261,11 +261,16 @@
     Note that we could also see consensus on Parsec::ExpectCandidate before we ourselves voted for it in PARSEC, as long as enough members of our section did.
     </p>
   </div>
-  <button class="collapsible">waiting_proofing_or_hop</button>
+  <button class="collapsible">count_waiting_proofing_or_hop</button>
   <div class="content">
     <p>We want to accept at most one incoming relocation at a time into our section.<br/>
-    The waiting_proofing_or_hop function returns the list of nodes that we have yet to resource proof or relocate through a new hop, (States from State::WaitingCandidateInfo until it reaches State::Online  or State::Relocated).<br/>
-    When the output of this function is not empty and we reach consensus on Parsec::ExpectCandidate, we send a Rpc::ExpectCandidateRefuseResponse to the would-be-incoming-node so they can try another section or try again later.
+    The count_waiting_proofing_or_hop function returns the count of nodes that we have yet to resource proof or relocate through a new hop, (States from State::WaitingCandidateInfo until it reaches State::Online  or State::Relocated).<br/>
+    When the output of this function is not 0 and we reach consensus on Parsec::ExpectCandidate, we send a Rpc::ExpectCandidateRefuseResponse to the would-be-incoming-node so they can try another section or try again later.
+    </p>
+  </div>
+  <button class="collapsible">get_waiting_candidate_info</button>
+  <div class="content">
+    <p>If we already accepted a candidate, reply with the same info we provided intially and returned by get_waiting_candidate_info.
     </p>
   </div>
   </div>
@@ -294,11 +299,11 @@
       VoteParsecExpectCandidate --> LoopEnd
 
       Balanced(("Check"))
-      Balanced -- "waiting_proofing_or_hop()<br/>.contains(candidate)" --> SendIdenticalExpectCandidateAcceptResponse
-      Balanced -- "waiting_proofing_or_hop()<br/>.is_empty()" --> SendExpectCandidateAcceptResponse
+      Balanced -- "get_waiting_candidate_info(candidate).is_some()" --> SendIdenticalExpectCandidateAcceptResponse
+      Balanced -- "count_waiting_proofing_or_hop()==0" --> SendExpectCandidateAcceptResponse
       Balanced -- "Otherwise" --> SendRefuse
 
-      SendIdenticalExpectCandidateAcceptResponse["send_rpc(<br/>Rpc::ExpectCandidateAcceptResponse)<br/>again to source section<br/>with original info"]
+      SendIdenticalExpectCandidateAcceptResponse["send_rpc(<br/>Rpc::ExpectCandidateAcceptResponse)<br/>again to source section<br/>with original info<br/>get_waiting_candidate_info(candidate)"]
       SendIdenticalExpectCandidateAcceptResponse --> LoopEnd
 
       SendExpectCandidateAcceptResponse["add_node(<br/>NodeState=State::WaitingCandidateInfo)<br/><br/>send_rpc(<br/>Rpc::ExpectCandidateAcceptResponse)<br/>to source section"]
@@ -312,12 +317,16 @@
 
   <h2>Relocated node connection</h2>
   <div class=description>
-  <p>Manage node with NodeState=State::WaitingConnectionInfo and connection info request/response RPCs.<br/>
+  <p>Manage node with NodeState=State::WaitingCandidateInfo and connection info request/response RPCs.<br/>
     The candidate sends its CandidateInfo to the NaeManager of the target interval to ensure it reaches the section even in the event of a split or a merge.<br/>
     This target interval address could be the middle address of the interval, and the interval should cover a range that will not be split if the section splits.<br/>
     When we complete, we either stop responding to Rpc::CandidateInfo RPCs if it failed, or we send Rpc::NodeConnected on success,<br/>
     (We could also omit Rpc::NodeConnected, the node would continue sending CandidateInfo until Rpc::ResourceProof or time out).<br/>
-    When the node reaches State::WaitingProofing or State::RelocatingHop state, the section becomes responsible for managing communication with this node as it would any of its adults.
+    When the node reaches State::WaitingProofing or State::RelocatingHop state, the section becomes responsible for managing communication with this node as it would any of its adults.<br/>
+    <br/>
+    Re-insert Parsec::CandidateConnected in case of prefix change (i.e split/merge + checkpoint), and CANDIDATES_INFO/CANDIDATES_VOTED should be kept.
+    Do not re-insert votes for which is_valid_waited_info is false (discarded candidates will never reach consensus).
+    (Alternatively could always discard votes on prefix change and clear CANDIDATES_INFO/CANDIDATES_VOTED)
   </p>
   <button class="collapsible">is_valid_waited_info</button>
   <div class="content">
@@ -329,11 +338,6 @@
         </ul>
     </p>
   </div>
-  <button class="collapsible">is_valid_waited_connection</button>
-  <div class="content">
-    <p>Return true if the given message_src of the current RPC is a one of our nodes and is in State::WaitingConnectionInfo state.
-    </p>
-  </div>
   <button class="collapsible">shorter_prefix_section</button>
   <div class="content">
     <p>If we know of a section that has a shorter prefix than ours, we prefer for them to receive this incoming node rather than ourselves as it will help keep the Network's sections tree balanced.<br/>
@@ -341,10 +345,33 @@
     If it is Some, we will relocate the new node to them instead of completing the relocation to our own section.
     </p>
   </div>
+  <button class="collapsible">update_to_node</button>
+  <div class="content">
+    <p>Convert the candidate node at the target interval address to a node using the new_public_id from the given CandidateInfo.
+       Update the state of the node with the given state.
+    </p>
+  </div>
   <button class="collapsible">State::RelocatingHop</button>
   <div class="content">
     <p>A nodes state indicating that it is relocated without ageing further.<br/>
-       Also returned as part of waiting_proofing_or_hop().
+       Also counted as part of count_waiting_proofing_or_hop().
+    </p>
+  </div>
+  <button class="collapsible">CANDIDATES</button>
+  <div class="content">
+    <p>Collection of candidate that we will purge if they are still in State::WaitingCandidateInfo next time Parsec::CheckRelocatedNodeConnection is consensused.
+    </p>
+  </div>
+  <button class="collapsible">CANDIDATES_INFO</button>
+  <div class="content">
+    <p>Collection of CandidateInfo keyed by CandidateInfo.new_public_id.<br/>
+    For all items, only keep if is_valid_waited_info(info)==true.
+    </p>
+  </div>
+  <button class="collapsible">CANDIDATES_VOTED</button>
+  <div class="content">
+    <p>Collection of candidates CandidateInfo.new_public_id that we have voted for as connected<br/>
+    For all items, only keep if also kept in CANDIDATES_INFO.
     </p>
   </div>
   <button class="collapsible">RelocatedNodeConnection_Reset</button>
@@ -371,28 +398,28 @@
       ParsecConsensus((Consensus))
 
       ParsecConsensus -- "Parsec::CheckRelocatedNodeConnection" --> CleanCandidates
-      CleanCandidates["for candidate in both<br/>-waiting_node_connecting()<br/>-CANDIDATES:<br/><br/>purge_node_info(candidate)"]
+      CleanCandidates["for candidate in both<br/>-waiting_node_connecting()<br/>-CANDIDATES:<br/><br/>purge_node_info(candidate)<br/><br/>CANDIDATES_INFO<br/>.retain(|(k,v)|is_valid_waited_info(v))<br/>CANDIDATES_VOTED<br/>.retain(|src| CANDIDATES_INFO.contains_key(src))<br/>CANDIDATES=waiting_node_connecting()<br/><br/>(reject candidates that took too long)"]
       CleanCandidates --> ReStartCheckRelocatedNodeConnectionTimeout
-      ReStartCheckRelocatedNodeConnectionTimeout["CANDIDATES=waiting_node_connecting()<br/><br/>schedule(<br/>CheckRelocatedNodeConnectionTimeout)"]
+      ReStartCheckRelocatedNodeConnectionTimeout["schedule(<br/>CheckRelocatedNodeConnectionTimeout)"]
       ReStartCheckRelocatedNodeConnectionTimeout --> LoopEnd
 
+      ParsecConsensus -- "Parsec::CandidateConnected" --> CheckValidConnected
+      CheckValidConnected((Check))
+      CheckValidConnected -- "is_valid_waited_info(<br/>Parsec::CandidateConnected info)" --> Balanced
 
-      ParsecConsensus -- "Parsec::CandidateInfo<br/>and<br/>is_valid_waited_info(<br/>CandidateInfo,<br/>message_src)" --> SetCandidateInfo
-      SetCandidateInfo["update_node(<br/>CandidateInfo,<br/>NodeState=State::WaitingConnectionInfo)"]
-      SetCandidateInfo --> LoopEnd
-
-      ParsecConsensus -- "Parsec::CandidateConnected<br/>and<br/>is_valid_waited_connection(<br/>message_src)" --> Balanced
       Balanced(("Check"))
       Balanced -- "shorter_prefix_section(<br/>).is_some()" --> RelocateToShorterPrefix
-      RelocateToShorterPrefix["set_node_state(<br/>candidate,<br/>State::RelocatingHop)"]
+      RelocateToShorterPrefix["update_to_node(<br/>Parsec::CandidateConnected info,<br/>State::RelocatingHop)"]
       RelocateToShorterPrefix --> SetConnected
 
       Balanced -- "Otherwise" --> SetWaitingProof
-      SetWaitingProof["set_node_state(<br/>candidate,<br/>State::WaitingProofing)"]
+      SetWaitingProof["update_to_node(<br/>Parsec::CandidateConnected info,<br/>State::WaitingProofing)"]
       SetWaitingProof --> SetConnected
 
       SetConnected["send_rpc(<br/>Rpc::NodeConnected)<br/><br/>(All communications now<br/>managed by elder like<br/>for other adults)"]
       SetConnected --> LoopEnd
+
+      CheckValidConnected -- "Otherwise" --> LoopEnd
 
       RPC((RPC))
       WaitFor --"RPC"--> RPC
@@ -403,16 +430,12 @@
       DiscardRPC[Discard RPC]
       DiscardRPC --> LoopEnd
 
-      CheckCandidateInfo -- "is_valid_waited_info(<br/>CandidateInfo)" --> VoteForCandidateInfo
-      VoteForCandidateInfo["vote_for(<br/>Parsec::CandidateInfo)"]
-      VoteForCandidateInfo --> LoopEnd
-
-      CheckCandidateInfo -- "is_valid_waited_connection(<br/>message_src)" --> SendConnectionInfoRequest
-      SendConnectionInfoRequest["send_rpc(<br/>Rpc::ConnectionInfoRequest)"]
+      CheckCandidateInfo -- "is_valid_waited_info(<br/>CandidateInfo)" --> SendConnectionInfoRequest
+      SendConnectionInfoRequest["CANDIDATES_INFO<br/>.insert_if_not_exists(<br/>CandidateInfo.new_public_id,<br/>CandidateInfo info)<br/><br/>send_rpc(<br/>Rpc::ConnectionInfoRequest)<br/><br/>(cache candidate info and<br/>send connect info)"]
       SendConnectionInfoRequest --> LoopEnd
 
-      RPC -- "Rpc::ConnectionInfoResponse<br/>and<br/>is_valid_waited_connection(<br/>message_src)" --> ConnectCandidate
-      ConnectCandidate["connect_to_candidate(<br/>ConnectionInfoResponse info)<br/><br/>vote_for(<br/>Parsec::CandidateConnected)"]
+      RPC -- "Rpc::ConnectionInfoResponse<br/>and<br/>CANDIDATES_INFO<br/>.contains_key(message_src)<br/>and<br/>!CANDIDATES_VOTED<br/>.contains(message_src)" --> ConnectCandidate
+      ConnectCandidate["connect_to_candidate(<br/>ConnectionInfoResponse info)<br/><br/>vote_for(<br/>Parsec::CandidateConnected{<br/>CANDIDATES_INFO.get(message_src)})<br/><br/>CANDIDATES_VOTED.insert(message_src)<br/><br/>(connect and vote for<br/>candidate connected)"]
       ConnectCandidate --> LoopEnd
 
       WaitFor --Event--> Event
