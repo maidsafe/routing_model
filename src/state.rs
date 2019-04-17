@@ -75,7 +75,7 @@ impl MemberState {
             return Some(next);
         }
 
-        if let Some(next) = self.as_accept_as_candidate().try_next(event) {
+        if let Some(next) = self.as_start_resource_proof().try_next(event) {
             return Some(next);
         }
 
@@ -99,8 +99,8 @@ impl MemberState {
         TopLevelDst(self.clone())
     }
 
-    pub fn as_accept_as_candidate(&self) -> AcceptAsCandidate {
-        AcceptAsCandidate(self.clone())
+    pub fn as_start_resource_proof(&self) -> StartResourceProof {
+        StartResourceProof(self.clone())
     }
 
     pub fn as_check_and_process_elder_change(&self) -> CheckAndProcessElderChange {

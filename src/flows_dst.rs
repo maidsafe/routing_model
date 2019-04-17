@@ -93,10 +93,10 @@ impl TopLevelDst {
 }
 
 #[derive(Debug, PartialEq, Default, Clone)]
-pub struct AcceptAsCandidate(pub MemberState);
+pub struct StartResourceProof(pub MemberState);
 
 // AcceptAsCandidate Sub Routine
-impl AcceptAsCandidate {
+impl StartResourceProof {
     // TODO - remove the `allow` once we have a test for this method.
     #[allow(dead_code)]
     fn start_event_loop(&self) -> Self {
