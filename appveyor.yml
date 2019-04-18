@@ -23,5 +23,8 @@ platform:
 configuration:
   - Release
 
+build_script:
+  - cargo build --verbose --release
+
 test_script:
   - cargo test --verbose --release
