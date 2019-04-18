@@ -10,12 +10,13 @@ use crate::{
     actions::*,
     state::*,
     utilities::{
-        Attributes, Candidate, ChangeElder, Event, GenesisPfxInfo, LocalEvent, Name, Node,
-        NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource, RelocatedInfo, Rpc,
-        Section, SectionInfo, State,
+        Attributes, Candidate, ChangeElder, Event, GenesisPfxInfo, LocalEvent, MergeInfo, Name,
+        Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource, RelocatedInfo,
+        Rpc, Section, SectionInfo, State,
     },
 };
 use lazy_static::lazy_static;
+use pretty_assertions::assert_eq;
 
 macro_rules! to_collect {
     ($($item:expr),*) => {{
@@ -145,6 +146,7 @@ struct AssertState {
     action_our_nodes: Vec<NodeChange>,
     action_our_events: Vec<LocalEvent>,
     action_our_section: SectionInfo,
+    action_merge_infos: Option<MergeInfo>,
     dst_routine: DstRoutineState,
     check_and_process_elder_change_routine: CheckAndProcessElderChangeState,
 }
@@ -180,6 +182,7 @@ fn run_test(
             action_our_nodes: action.our_nodes,
             action_our_events: action.our_events,
             action_our_section: action.our_section,
+            action_merge_infos: action.merge_infos,
             dst_routine: final_state.dst_routine,
             check_and_process_elder_change_routine: final_state
                 .check_and_process_elder_change_routine,
@@ -570,6 +573,73 @@ mod dst_tests {
                     got_candidate_info: false,
                     voted_online: false,
                 }),
+                ..AssertState::default()
+            },
+        );
+    }
+
+    #[test]
+    fn rpc_merge() {
+        run_test(
+            "Get RPC Merge",
+            &initial_state_old_elders(),
+            &[Rpc::Merge.to_event()],
+            &AssertState {
+                action_our_votes: vec![ParsecVote::NeighbourMerge(MergeInfo)],
+                ..AssertState::default()
+            },
+        );
+    }
+
+    #[test]
+    fn parsec_neighbour_merge() {
+        run_test(
+            "Get Parsec NeighbourMergeInfo",
+            &initial_state_old_elders(),
+            &[ParsecVote::NeighbourMerge(MergeInfo).to_event()],
+            &AssertState {
+                action_merge_infos: Some(MergeInfo),
+                check_and_process_elder_change_routine: CheckAndProcessElderChangeState {
+                    ..Default::default()
+                },
+                ..AssertState::default()
+            },
+        );
+    }
+
+    #[test]
+    fn parsec_neighbour_merge_then_check_elder() {
+        let initial_state = arrange_initial_state(
+            &initial_state_old_elders(),
+            &[ParsecVote::NeighbourMerge(MergeInfo).to_event()],
+        );
+
+        run_test(
+            "Get Parsec NeighbourMergeInfo then CheckElder",
+            &initial_state,
+            &[ParsecVote::CheckElder.to_event()],
+            &AssertState {
+                action_merge_infos: Some(MergeInfo),
+                action_our_rpcs: vec![Rpc::Merge],
+                check_and_process_elder_change_routine: CheckAndProcessElderChangeState {
+                    ..Default::default()
+                },
+                ..AssertState::default()
+            },
+        );
+    }
+
+    #[test]
+    fn parsec_merge_needed() {
+        let initial_state = initial_state_old_elders();
+        initial_state.action.set_merge_needed(true);
+
+        run_test(
+            "Merge needed",
+            &initial_state,
+            &[ParsecVote::CheckElder.to_event()],
+            &AssertState {
+                action_our_rpcs: vec![Rpc::Merge],
                 ..AssertState::default()
             },
         );
@@ -1332,6 +1402,7 @@ mod src_tests {
 mod node_tests {
     use super::*;
     use crate::state::JoiningRelocateCandidateState;
+    use pretty_assertions::assert_eq;
 
     #[derive(Debug, PartialEq, Default, Clone)]
     struct AssertJoiningState {

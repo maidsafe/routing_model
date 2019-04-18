@@ -8,7 +8,9 @@
 
 use crate::{
     state::{AcceptAsCandidateState, MemberState, ProcessElderChangeState},
-    utilities::{Candidate, ChangeElder, Event, LocalEvent, Node, ParsecVote, Proof, Rpc, Section},
+    utilities::{
+        Candidate, ChangeElder, Event, LocalEvent, MergeInfo, Node, ParsecVote, Proof, Rpc, Section,
+    },
 };
 use unwrap::unwrap;
 
@@ -271,6 +273,7 @@ impl CheckAndProcessElderChange {
     pub fn try_next(&self, event: Event) -> Option<MemberState> {
         match event {
             Event::ParsecConsensus(vote) => self.try_consensus(&vote),
+            Event::Rpc(rpc) => self.try_rpc(rpc),
             Event::LocalEvent(LocalEvent::TimeoutCheckElder) => {
                 Some(self.vote_parsec_check_elder())
             }
@@ -281,8 +284,39 @@ impl CheckAndProcessElderChange {
 
     fn try_consensus(&self, vote: &ParsecVote) -> Option<Self> {
         match vote {
-            ParsecVote::CheckElder => Some(self.check_elder()),
+            ParsecVote::NeighbourMerge(merge_info) => Some(self.store_merge_infos(*merge_info)),
+            ParsecVote::CheckElder => Some(self.check_merge()),
             _ => None,
+        }
+    }
+
+    fn try_rpc(&self, rpc: Rpc) -> Option<Self> {
+        match rpc {
+            Rpc::Merge => Some(self.vote_parsec_neighbour_merge()),
+            _ => None,
+        }
+    }
+
+    fn store_merge_infos(&self, merge_info: MergeInfo) -> Self {
+        self.0.action.store_merge_infos(merge_info);
+        self.clone()
+    }
+
+    fn merge_needed(&self) -> bool {
+        self.0.action.merge_needed()
+    }
+
+    fn has_merge_infos(&self) -> bool {
+        self.0.action.has_merge_infos()
+    }
+
+    fn check_merge(&self) -> Self {
+        if self.has_merge_infos() || self.merge_needed() {
+            // TODO: -> Concurrent to ProcessMerge
+            self.0.action.send_rpc(Rpc::Merge);
+            self.clone()
+        } else {
+            self.check_elder()
         }
     }
 
@@ -307,6 +341,13 @@ impl CheckAndProcessElderChange {
 
     fn vote_parsec_check_elder(&self) -> Self {
         self.0.action.vote_parsec(ParsecVote::CheckElder);
+        self.clone()
+    }
+
+    fn vote_parsec_neighbour_merge(&self) -> Self {
+        self.0
+            .action
+            .vote_parsec(ParsecVote::NeighbourMerge(MergeInfo));
         self.clone()
     }
 
