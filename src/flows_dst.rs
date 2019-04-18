@@ -8,8 +8,8 @@
 
 use crate::{
     state::{
-        AcceptAsCandidateState, MemberState, ProcessElderChangeState,
-        StartRelocatedNodeConnectionState,
+        MemberState, ProcessElderChangeState, StartRelocatedNodeConnectionState,
+        StartResourceProofState,
     },
     utilities::{
         Candidate, CandidateInfo, ChangeElder, Event, LocalEvent, MergeInfo, Name, Node,
@@ -19,9 +19,9 @@ use crate::{
 use unwrap::unwrap;
 
 #[derive(Debug, PartialEq, Default, Clone)]
-pub struct TopLevelDst(pub MemberState);
+pub struct RespondToRelocateRequests(pub MemberState);
 
-impl TopLevelDst {
+impl RespondToRelocateRequests {
     pub fn try_next(&self, event: Event) -> Option<MemberState> {
         match event {
             Event::Rpc(rpc) => self.try_rpc(rpc),
@@ -324,12 +324,12 @@ impl StartResourceProof {
         }
     }
 
-    fn routine_state(&self) -> &AcceptAsCandidateState {
-        &self.0.sub_routine_accept_as_candidate
+    fn routine_state(&self) -> &StartResourceProofState {
+        &self.0.start_resource_proof
     }
 
-    fn mut_routine_state(&mut self) -> &mut AcceptAsCandidateState {
-        &mut self.0.sub_routine_accept_as_candidate
+    fn mut_routine_state(&mut self) -> &mut StartResourceProofState {
+        &mut self.0.start_resource_proof
     }
 
     fn discard(&self) -> Self {

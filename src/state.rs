@@ -22,7 +22,7 @@ pub struct CheckAndProcessElderChangeState {
 }
 
 #[derive(Debug, PartialEq, Default, Clone)]
-pub struct AcceptAsCandidateState {
+pub struct StartResourceProofState {
     pub candidate: Option<Candidate>,
     pub got_candidate_info: bool,
     pub voted_online: bool,
@@ -48,10 +48,10 @@ pub struct SrcRoutineState {}
 pub struct MemberState {
     pub action: Action,
     pub failure: Option<Event>,
-    pub sub_routine_accept_as_candidate: AcceptAsCandidateState,
+    pub start_resource_proof: StartResourceProofState,
+    pub start_relocated_node_connection_state: StartRelocatedNodeConnectionState,
     pub src_routine: SrcRoutineState,
     pub start_relocate_src: StartRelocateSrcState,
-    pub start_relocated_node_connection_state: StartRelocatedNodeConnectionState,
     pub check_and_process_elder_change_routine: CheckAndProcessElderChangeState,
 }
 
@@ -91,7 +91,7 @@ impl MemberState {
             return Some(next);
         }
 
-        if let Some(next) = self.as_top_level_dst().try_next(event) {
+        if let Some(next) = self.as_respond_to_relocate_requests().try_next(event) {
             return Some(next);
         }
 
@@ -116,8 +116,8 @@ impl MemberState {
         }
     }
 
-    pub fn as_top_level_dst(&self) -> TopLevelDst {
-        TopLevelDst(self.clone())
+    pub fn as_respond_to_relocate_requests(&self) -> RespondToRelocateRequests {
+        RespondToRelocateRequests(self.clone())
     }
 
     pub fn as_start_relocated_node_connection(&self) -> StartRelocatedNodeConnection {
