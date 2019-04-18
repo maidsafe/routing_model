@@ -262,7 +262,6 @@ impl StartRelocatedNodeConnection {
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct StartResourceProof(pub MemberState);
 
-// AcceptAsCandidate Sub Routine
 impl StartResourceProof {
     // TODO - remove the `allow` once we have a test for this method.
     #[allow(dead_code)]
@@ -277,7 +276,7 @@ impl StartResourceProof {
         match event {
             Event::Rpc(Rpc::ResourceProofResponse {
                 candidate, proof, ..
-            }) => self.try_rpc_proof(candidate, proof),
+            }) => Some(self.rpc_proof(candidate, proof)),
             Event::ParsecConsensus(vote) => self.try_consensus(vote),
             Event::LocalEvent(local_event) => self.try_local_event(local_event),
             // Delegate to other event loops
@@ -286,32 +285,30 @@ impl StartResourceProof {
         .map(|state| state.0)
     }
 
-    fn try_rpc_proof(&self, candidate: Candidate, proof: Proof) -> Option<Self> {
-        if !self.has_candidate()
-            || candidate != self.candidate()
-            || self.routine_state().voted_online
-            || !proof.is_valid()
-        {
-            return Some(self.discard());
-        }
+    fn rpc_proof(&self, candidate: Candidate, proof: Proof) -> Self {
+        let from_candidate = self.has_candidate() && candidate == self.candidate();
 
-        Some(match proof {
-            Proof::ValidPart => self.send_resource_proof_receipt_rpc(),
-            Proof::ValidEnd => self.set_voted_online(true).vote_parsec_online_candidate(),
-            Proof::Invalid => panic!("Only valid proof"),
-        })
+        if from_candidate && !self.routine_state().voted_online && proof.is_valid() {
+            match proof {
+                Proof::ValidPart => self.send_resource_proof_receipt_rpc(),
+                Proof::ValidEnd => self.set_voted_online(true).vote_parsec_online_candidate(),
+                Proof::Invalid => panic!("Only valid proof"),
+            }
+        } else {
+            self.discard()
+        }
     }
 
     fn try_consensus(&self, vote: ParsecVote) -> Option<Self> {
-        let from_candidate = self.has_candidate() && vote.candidate() == Some(self.candidate());
+        let for_candidate = self.has_candidate() && vote.candidate() == Some(self.candidate());
 
         match vote {
             ParsecVote::CheckResourceProof => Some(
                 self.set_resource_proof_candidate()
                     .check_request_resource_proof(),
             ),
-            ParsecVote::Online(_) if from_candidate => Some(self.make_node_online()),
-            ParsecVote::PurgeCandidate(_) if from_candidate => Some(self.purge_node_info()),
+            ParsecVote::Online(_) if for_candidate => Some(self.make_node_online()),
+            ParsecVote::PurgeCandidate(_) if for_candidate => Some(self.purge_node_info()),
             ParsecVote::Online(_) | ParsecVote::PurgeCandidate(_) => Some(self.discard()),
 
             // Delegate to other event loops
