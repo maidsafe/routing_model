@@ -165,7 +165,6 @@ struct AssertState {
     action_our_events: Vec<LocalEvent>,
     action_our_section: SectionInfo,
     action_merge_infos: Option<MergeInfo>,
-    check_and_process_elder_change_routine: CheckAndProcessElderChangeState,
 }
 
 fn process_events(mut state: MemberState, events: &[Event]) -> MemberState {
@@ -200,8 +199,6 @@ fn run_test(
             action_our_events: action.our_events,
             action_our_section: action.our_section,
             action_merge_infos: action.merge_infos,
-            check_and_process_elder_change_routine: final_state
-                .check_and_process_elder_change_routine,
         },
         final_state.failure,
     );
@@ -842,9 +839,6 @@ mod dst_tests {
             &[ParsecVote::NeighbourMerge(MergeInfo).to_event()],
             &AssertState {
                 action_merge_infos: Some(MergeInfo),
-                check_and_process_elder_change_routine: CheckAndProcessElderChangeState {
-                    ..Default::default()
-                },
                 ..AssertState::default()
             },
         );
@@ -864,9 +858,6 @@ mod dst_tests {
             &AssertState {
                 action_merge_infos: Some(MergeInfo),
                 action_our_rpcs: vec![Rpc::Merge],
-                check_and_process_elder_change_routine: CheckAndProcessElderChangeState {
-                    ..Default::default()
-                },
                 ..AssertState::default()
             },
         );
@@ -940,13 +931,6 @@ mod dst_tests {
                 action_our_rpcs: vec![Rpc::NodeApproval(CANDIDATE_1, OUR_GENESIS_INFO)],
                 action_our_votes: SWAP_ELDER_109_NODE_1_SECTION_INFO_1.1.clone(),
                 action_our_nodes: vec![SET_ONLINE_NODE_1],
-                check_and_process_elder_change_routine: CheckAndProcessElderChangeState {
-                    sub_routine_process_elder_change: ProcessElderChangeState {
-                        is_active: true,
-                        change_elder: Some(SWAP_ELDER_109_NODE_1_SECTION_INFO_1.0.clone()),
-                        wait_votes: SWAP_ELDER_109_NODE_1_SECTION_INFO_1.1.clone(),
-                    },
-                },
                 action_our_events: vec![LocalEvent::CheckResourceProofTimeout],
                 ..AssertState::default()
             },
@@ -983,13 +967,6 @@ mod dst_tests {
                     LocalEvent::UnexpectedEventIgnored,
                     LocalEvent::UnexpectedEventIgnored,
                 ],
-                check_and_process_elder_change_routine: CheckAndProcessElderChangeState {
-                    sub_routine_process_elder_change: ProcessElderChangeState {
-                        is_active: true,
-                        change_elder: Some(SWAP_ELDER_109_NODE_1_SECTION_INFO_1.0.clone()),
-                        wait_votes: SWAP_ELDER_109_NODE_1_SECTION_INFO_1.1.clone(),
-                    },
-                },
                 ..AssertState::default()
             },
         );
@@ -1012,19 +989,7 @@ mod dst_tests {
             "Get Parsec ExpectCandidate then Online (Elder Change) then RemoveElderNode",
             &initial_state,
             &[ParsecVote::RemoveElderNode(NODE_ELDER_109).to_event()],
-            &AssertState {
-                check_and_process_elder_change_routine: CheckAndProcessElderChangeState {
-                    sub_routine_process_elder_change: ProcessElderChangeState {
-                        is_active: true,
-                        change_elder: Some(SWAP_ELDER_109_NODE_1_SECTION_INFO_1.0.clone()),
-                        wait_votes: vec![
-                            ParsecVote::AddElderNode(NODE_1),
-                            ParsecVote::NewSectionInfo(SECTION_INFO_1),
-                        ],
-                    },
-                },
-                ..AssertState::default()
-            },
+            &AssertState::default(),
         );
     }
 
@@ -1234,13 +1199,6 @@ mod dst_tests {
             &[ParsecVote::CheckElder.to_event()],
             &AssertState {
                 action_our_votes: SWAP_ELDER_130_YOUNG_205_SECTION_INFO_1.1.clone(),
-                check_and_process_elder_change_routine: CheckAndProcessElderChangeState {
-                    sub_routine_process_elder_change: ProcessElderChangeState {
-                        is_active: true,
-                        change_elder: Some(SWAP_ELDER_130_YOUNG_205_SECTION_INFO_1.0.clone()),
-                        wait_votes: SWAP_ELDER_130_YOUNG_205_SECTION_INFO_1.1.clone(),
-                    },
-                },
                 ..AssertState::default()
             },
         );
@@ -1454,13 +1412,6 @@ mod src_tests {
                     State::RelocatingAgeIncrease,
                 )],
                 action_our_votes: SWAP_ELDER_130_YOUNG_205_SECTION_INFO_1.1.clone(),
-                check_and_process_elder_change_routine: CheckAndProcessElderChangeState {
-                    sub_routine_process_elder_change: ProcessElderChangeState {
-                        is_active: true,
-                        change_elder: Some(SWAP_ELDER_130_YOUNG_205_SECTION_INFO_1.0.clone()),
-                        wait_votes: SWAP_ELDER_130_YOUNG_205_SECTION_INFO_1.1.clone(),
-                    },
-                },
                 ..AssertState::default()
             },
         );
