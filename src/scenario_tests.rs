@@ -10,9 +10,9 @@ use crate::{
     actions::*,
     state::*,
     utilities::{
-        Age, Attributes, Candidate, CandidateInfo, Event, GenesisPfxInfo, LocalEvent, MergeInfo,
-        Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource,
-        RelocatedInfo, Rpc, Section, SectionInfo, State, TestEvent,
+        ActionTriggered, Age, Attributes, Candidate, CandidateInfo, Event, GenesisPfxInfo,
+        LocalEvent, MergeInfo, Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest,
+        ProofSource, RelocatedInfo, Rpc, Section, SectionInfo, State, TestEvent,
     },
 };
 use lazy_static::lazy_static;
@@ -382,7 +382,7 @@ mod dst_tests {
             }
             .to_event()],
             &AssertState {
-                action_our_events: vec![LocalEvent::NotYetImplementedEvent.to_event()],
+                action_our_events: vec![ActionTriggered::NotYetImplementedErrorTriggered.to_event()],
                 ..AssertState::default()
             },
         );
@@ -529,7 +529,7 @@ mod dst_tests {
                 action_our_events: vec![
                     NodeChange::Remove(TARGET_INTERVAL_1).to_event(),
                     LocalEvent::CheckRelocatedNodeConnectionTimeout.to_event(),
-                    LocalEvent::NotYetImplementedEvent.to_event(),
+                    ActionTriggered::NotYetImplementedErrorTriggered.to_event(),
                 ],
                 ..AssertState::default()
             },
@@ -941,9 +941,9 @@ mod dst_tests {
             ],
             &AssertState {
                 action_our_events: vec![
-                    LocalEvent::UnexpectedEventIgnored.to_event(),
-                    LocalEvent::UnexpectedEventIgnored.to_event(),
-                    LocalEvent::UnexpectedEventIgnored.to_event(),
+                    ActionTriggered::UnexpectedEventErrorTriggered.to_event(),
+                    ActionTriggered::UnexpectedEventErrorTriggered.to_event(),
+                    ActionTriggered::UnexpectedEventErrorTriggered.to_event(),
                 ],
                 ..AssertState::default()
             },
@@ -1251,6 +1251,7 @@ mod src_tests {
             ],
             &AssertState {
                 action_our_events: vec![
+                    ActionTriggered::WorkUnitIncremented.to_event(),
                     NodeChange::State(YOUNG_ADULT_205, State::RelocatingAgeIncrease).to_event(),
                     Rpc::ExpectCandidate(CANDIDATE_205).to_event(),
                 ],
@@ -1345,6 +1346,7 @@ mod src_tests {
             ],
             &AssertState {
                 action_our_events: vec![
+                    ActionTriggered::WorkUnitIncremented.to_event(),
                     NodeChange::State(YOUNG_ADULT_205, State::RelocatingAgeIncrease).to_event(),
                     Rpc::ExpectCandidate(CANDIDATE_205).to_event(),
                     Rpc::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
@@ -1369,6 +1371,7 @@ mod src_tests {
             ],
             &AssertState {
                 action_our_events: vec![
+                    ActionTriggered::WorkUnitIncremented.to_event(),
                     NodeChange::State(NODE_ELDER_130, State::RelocatingAgeIncrease).to_event(),
                     ParsecVote::AddElderNode(YOUNG_ADULT_205).to_event(),
                     ParsecVote::RemoveElderNode(NODE_ELDER_130).to_event(),

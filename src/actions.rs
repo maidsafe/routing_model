@@ -7,9 +7,9 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::utilities::{
-    Age, Attributes, Candidate, CandidateInfo, ChangeElder, Event, GenesisPfxInfo, LocalEvent,
-    MergeInfo, Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource,
-    RelocatedInfo, Rpc, Section, SectionInfo, State, TestEvent,
+    ActionTriggered, Age, Attributes, Candidate, CandidateInfo, ChangeElder, Event, GenesisPfxInfo,
+    LocalEvent, MergeInfo, Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest,
+    ProofSource, RelocatedInfo, Rpc, Section, SectionInfo, State, TestEvent,
 };
 use itertools::Itertools;
 use std::{
@@ -186,6 +186,10 @@ impl Action {
     }
 
     pub fn schedule_event(&self, event: LocalEvent) {
+        self.0.borrow_mut().our_events.push(event.to_event());
+    }
+
+    pub fn action_triggered(&self, event: ActionTriggered) {
         self.0.borrow_mut().our_events.push(event.to_event());
     }
 
@@ -515,7 +519,9 @@ impl Action {
         });
     }
 
-    pub fn increment_nodes_work_units(&self) {}
+    pub fn increment_nodes_work_units(&self) {
+        self.action_triggered(ActionTriggered::WorkUnitIncremented);
+    }
 
     pub fn store_merge_infos(&self, merge_info: MergeInfo) {
         self.0.borrow_mut().store_merge_infos(merge_info);

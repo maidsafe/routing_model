@@ -224,7 +224,9 @@ pub enum Event {
     ParsecConsensus(ParsecVote),
     LocalEvent(LocalEvent),
     TestEvent(TestEvent),
+
     NodeChange(NodeChange),
+    ActionTriggered(ActionTriggered),
 }
 
 impl Event {
@@ -233,7 +235,7 @@ impl Event {
             Event::Rpc(rpc) => Some(WaitedEvent::Rpc(rpc)),
             Event::ParsecConsensus(parsec_vote) => Some(WaitedEvent::ParsecConsensus(parsec_vote)),
             Event::LocalEvent(local_event) => Some(WaitedEvent::LocalEvent(local_event)),
-            Event::TestEvent(_) | Event::NodeChange(_) => None,
+            Event::TestEvent(_) | Event::NodeChange(_) | Event::ActionTriggered(_) => None,
         }
     }
 
@@ -388,11 +390,6 @@ pub enum LocalEvent {
     ComputeResourceProofForElder(Name, ProofSource),
     NodeDetectedOffline(Node),
     NodeDetectedBackOnline(Node),
-
-    // WaitedEvent that should be handled by a flow but are not.
-    NotYetImplementedEvent,
-    // Unexpected event ignored:
-    UnexpectedEventIgnored,
 }
 
 impl LocalEvent {
@@ -411,5 +408,21 @@ pub enum TestEvent {
 impl TestEvent {
     pub fn to_event(self) -> Event {
         Event::TestEvent(self)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ActionTriggered {
+    WorkUnitIncremented,
+
+    // WaitedEvent that should be handled by a flow but are not.
+    NotYetImplementedErrorTriggered,
+    // Unexpected event ignored.
+    UnexpectedEventErrorTriggered,
+}
+
+impl ActionTriggered {
+    pub fn to_event(self) -> Event {
+        Event::ActionTriggered(self)
     }
 }

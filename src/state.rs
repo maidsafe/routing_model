@@ -106,7 +106,7 @@ impl MemberState {
         match event {
             WaitedEvent::Rpc(Rpc::ConnectionInfoResponse { .. }) => {
                 self.action
-                    .schedule_event(LocalEvent::NotYetImplementedEvent);
+                    .action_triggered(ActionTriggered::NotYetImplementedErrorTriggered);
                 Some(self.clone())
             }
             // These should only happen if a routine started them, so it should have
@@ -116,7 +116,7 @@ impl MemberState {
             | WaitedEvent::ParsecConsensus(ParsecVote::AddElderNode(_))
             | WaitedEvent::ParsecConsensus(ParsecVote::NewSectionInfo(_)) => {
                 self.action
-                    .schedule_event(LocalEvent::UnexpectedEventIgnored);
+                    .action_triggered(ActionTriggered::UnexpectedEventErrorTriggered);
                 Some(self.clone())
             }
 
