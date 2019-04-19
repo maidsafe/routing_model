@@ -134,6 +134,8 @@ impl InnerAction {
 
     fn set_section_info(&mut self, section: SectionInfo) {
         self.our_section = section;
+        self.our_events
+            .push(ActionTriggered::OurSectionChanged(section).to_event());
     }
 
     fn store_merge_infos(&mut self, merge_info: MergeInfo) {

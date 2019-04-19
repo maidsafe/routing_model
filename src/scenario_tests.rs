@@ -138,7 +138,6 @@ lazy_static! {
 #[derive(Debug, PartialEq, Default, Clone)]
 struct AssertState {
     action_our_events: Vec<Event>,
-    action_our_section: SectionInfo,
 }
 
 fn process_events(mut state: MemberState, events: &[Event]) -> MemberState {
@@ -168,7 +167,6 @@ fn run_test(
     let final_state = (
         AssertState {
             action_our_events: action.our_events,
-            action_our_section: action.our_section,
         },
         final_state.failure,
     );
@@ -221,7 +219,6 @@ mod dst_tests {
             &[Rpc::ExpectCandidate(CANDIDATE_1_OLD).to_event()],
             &AssertState {
                 action_our_events: vec![ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -248,7 +245,6 @@ mod dst_tests {
                     Rpc::RelocateResponse(CANDIDATE_RELOCATED_INFO_1).to_event(),
                     LocalEvent::CheckResourceProofTimeout.to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -268,7 +264,6 @@ mod dst_tests {
                 action_our_events: vec![
                     Rpc::RelocateResponse(CANDIDATE_RELOCATED_INFO_1).to_event()
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -294,7 +289,6 @@ mod dst_tests {
                     connection_info: OUR_NAME.0,
                 }
                 .to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -320,7 +314,6 @@ mod dst_tests {
                     connection_info: OUR_NAME.0,
                 }
                 .to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -347,7 +340,6 @@ mod dst_tests {
             .to_event()],
             &AssertState {
                 action_our_events: vec![CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -381,7 +373,6 @@ mod dst_tests {
             .to_event()],
             &AssertState {
                 action_our_events: vec![ActionTriggered::NotYetImplementedErrorTriggered.to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -407,7 +398,6 @@ mod dst_tests {
                     Rpc::NodeConnected(CANDIDATE_1, OUR_GENESIS_INFO).to_event(),
                     Rpc::RefuseCandidate(CANDIDATE_1_OLD).to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -438,7 +428,6 @@ mod dst_tests {
                     Rpc::RefuseCandidate(CANDIDATE_1_OLD).to_event(),
                     Rpc::ExpectCandidate(CANDIDATE_1).to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -469,7 +458,6 @@ mod dst_tests {
             &[LocalEvent::CheckRelocatedNodeConnectionTimeout.to_event()],
             &AssertState {
                 action_our_events: vec![ParsecVote::CheckRelocatedNodeConnection.to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -496,7 +484,6 @@ mod dst_tests {
                     NodeChange::Remove(TARGET_INTERVAL_1).to_event(),
                     LocalEvent::CheckRelocatedNodeConnectionTimeout.to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -529,7 +516,6 @@ mod dst_tests {
                     LocalEvent::CheckRelocatedNodeConnectionTimeout.to_event(),
                     ActionTriggered::NotYetImplementedErrorTriggered.to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -575,7 +561,6 @@ mod dst_tests {
             &[LocalEvent::TimeoutAccept.to_event()],
             &AssertState {
                 action_our_events: vec![ParsecVote::PurgeCandidate(CANDIDATE_1).to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -625,7 +610,6 @@ mod dst_tests {
                     proof: OUR_PROOF_REQUEST,
                 }
                 .to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -656,7 +640,6 @@ mod dst_tests {
                     source: OUR_NAME,
                 }
                 .to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -683,7 +666,6 @@ mod dst_tests {
             .to_event()],
             &AssertState {
                 action_our_events: vec![ParsecVote::Online(CANDIDATE_1).to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -796,7 +778,6 @@ mod dst_tests {
             &[Rpc::Merge.to_event()],
             &AssertState {
                 action_our_events: vec![ParsecVote::NeighbourMerge(MergeInfo).to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -809,7 +790,6 @@ mod dst_tests {
             &[ParsecVote::NeighbourMerge(MergeInfo).to_event()],
             &AssertState {
                 action_our_events: vec![ActionTriggered::MergeInfoStored(MergeInfo).to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -827,7 +807,6 @@ mod dst_tests {
             &[ParsecVote::CheckElder.to_event()],
             &AssertState {
                 action_our_events: vec![Rpc::Merge.to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -845,7 +824,6 @@ mod dst_tests {
             ],
             &AssertState {
                 action_our_events: vec![Rpc::Merge.to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -875,7 +853,6 @@ mod dst_tests {
                     LocalEvent::CheckResourceProofTimeout.to_event(),
                     LocalEvent::TimeoutCheckElder.to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -907,7 +884,6 @@ mod dst_tests {
                     ParsecVote::RemoveElderNode(NODE_ELDER_109).to_event(),
                     ParsecVote::NewSectionInfo(SECTION_INFO_1).to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -942,7 +918,6 @@ mod dst_tests {
                     ActionTriggered::UnexpectedEventErrorTriggered.to_event(),
                     ActionTriggered::UnexpectedEventErrorTriggered.to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -991,13 +966,12 @@ mod dst_tests {
                 ParsecVote::NewSectionInfo(SECTION_INFO_1).to_event(),
             ],
             &AssertState {
-                action_our_section: SECTION_INFO_1,
                 action_our_events: vec![
                     NodeChange::Elder(NODE_1, true).to_event(),
                     NodeChange::Elder(NODE_ELDER_109, false).to_event(),
+                    ActionTriggered::OurSectionChanged(SECTION_INFO_1).to_event(),
                     LocalEvent::TimeoutCheckElder.to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -1027,7 +1001,6 @@ mod dst_tests {
                 ParsecVote::CheckResourceProof.to_event(),
             ],
             &&AssertState {
-                action_our_section: SECTION_INFO_1,
                 action_our_events: vec![
                     NodeChange::AddWithState(
                         Node(Attributes {
@@ -1051,7 +1024,6 @@ mod dst_tests {
                     .to_event(),
                     LocalEvent::CheckResourceProofTimeout.to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -1076,7 +1048,6 @@ mod dst_tests {
                     REMOVE_NODE_1.to_event(),
                     LocalEvent::CheckResourceProofTimeout.to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -1098,7 +1069,6 @@ mod dst_tests {
             &[ParsecVote::ExpectCandidate(CANDIDATE_2_OLD).to_event()],
             &AssertState {
                 action_our_events: vec![Rpc::RefuseCandidate(CANDIDATE_2_OLD).to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -1150,7 +1120,6 @@ mod dst_tests {
                     ParsecVote::Offline(NODE_ELDER_130).to_event(),
                     ParsecVote::BackOnline(NODE_ELDER_131).to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -1165,7 +1134,6 @@ mod dst_tests {
                 action_our_events: vec![
                     NodeChange::State(NODE_ELDER_130, State::Offline).to_event()
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -1186,7 +1154,6 @@ mod dst_tests {
                     ParsecVote::RemoveElderNode(NODE_ELDER_130).to_event(),
                     ParsecVote::NewSectionInfo(SECTION_INFO_1).to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -1207,7 +1174,6 @@ mod dst_tests {
                     State::RelocatingBackOnline,
                 )
                 .to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -1231,7 +1197,6 @@ mod src_tests {
                     ParsecVote::WorkUnitIncrement.to_event(),
                     LocalEvent::TimeoutWorkUnit.to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -1252,7 +1217,6 @@ mod src_tests {
                     NodeChange::State(YOUNG_ADULT_205, State::RelocatingAgeIncrease).to_event(),
                     Rpc::ExpectCandidate(CANDIDATE_205).to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -1298,7 +1262,6 @@ mod src_tests {
             &[ParsecVote::CheckRelocate.to_event()],
             &AssertState {
                 action_our_events: vec![Rpc::ExpectCandidate(CANDIDATE_205).to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -1350,7 +1313,6 @@ mod src_tests {
                     Rpc::ExpectCandidate(CANDIDATE_2).to_event(),
                     Rpc::ExpectCandidate(CANDIDATE_205).to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -1374,7 +1336,6 @@ mod src_tests {
                     ParsecVote::RemoveElderNode(NODE_ELDER_130).to_event(),
                     ParsecVote::NewSectionInfo(SECTION_INFO_1).to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -1400,14 +1361,13 @@ mod src_tests {
                 ParsecVote::CheckRelocate.to_event(),
             ],
             &AssertState {
-                action_our_section: SECTION_INFO_1,
                 action_our_events: vec![
                     NodeChange::Elder(YOUNG_ADULT_205, true).to_event(),
                     NodeChange::Elder(NODE_ELDER_130, false).to_event(),
+                    ActionTriggered::OurSectionChanged(SECTION_INFO_1).to_event(),
                     LocalEvent::TimeoutCheckElder.to_event(),
                     Rpc::ExpectCandidate(CANDIDATE_130).to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -1429,7 +1389,6 @@ mod src_tests {
             &[Rpc::RefuseCandidate(CANDIDATE_205).to_event()],
             &AssertState {
                 action_our_events: vec![ParsecVote::RefuseCandidate(CANDIDATE_205).to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -1458,7 +1417,6 @@ mod src_tests {
                     DST_SECTION_INFO_200,
                 ))
                 .to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -1502,7 +1460,6 @@ mod src_tests {
                         .to_event(),
                     NodeChange::Remove(YOUNG_ADULT_205.name()).to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -1544,7 +1501,6 @@ mod src_tests {
             &[ParsecVote::CheckRelocate.to_event()],
             &AssertState {
                 action_our_events: vec![Rpc::ExpectCandidate(CANDIDATE_205).to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -1570,9 +1526,7 @@ mod src_tests {
             &initial_state,
             &[ParsecVote::CheckRelocate.to_event()],
             &AssertState {
-                action_our_section: SECTION_INFO_1,
                 action_our_events: vec![Rpc::ExpectCandidate(CANDIDATE_130).to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -1585,7 +1539,6 @@ mod src_tests {
             &[Rpc::RefuseCandidate(CANDIDATE_205).to_event()],
             &AssertState {
                 action_our_events: vec![ParsecVote::RefuseCandidate(CANDIDATE_205).to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -1605,7 +1558,6 @@ mod src_tests {
                     DST_SECTION_INFO_200,
                 ))
                 .to_event()],
-                ..AssertState::default()
             },
         );
     }
@@ -1619,7 +1571,6 @@ mod node_tests {
     #[derive(Debug, PartialEq, Default, Clone)]
     struct AssertJoiningState {
         action_our_events: Vec<Event>,
-        action_our_section: SectionInfo,
         join_routine: JoiningRelocateCandidateState,
     }
 
@@ -1635,7 +1586,6 @@ mod node_tests {
         let final_state = (
             AssertJoiningState {
                 action_our_events: action.our_events,
-                action_our_section: action.our_section,
                 join_routine: final_state.join_routine,
             },
             final_state.failure,
@@ -1714,7 +1664,6 @@ mod node_tests {
                     ],
                     ..JoiningRelocateCandidateState::default()
                 },
-                ..AssertJoiningState::default()
             },
         );
     }
@@ -1768,7 +1717,6 @@ mod node_tests {
                     ],
                     ..JoiningRelocateCandidateState::default()
                 },
-                ..AssertJoiningState::default()
             },
         );
     }
@@ -1816,7 +1764,6 @@ mod node_tests {
                     ],
                     ..JoiningRelocateCandidateState::default()
                 },
-                ..AssertJoiningState::default()
             },
         );
     }
@@ -1860,7 +1807,6 @@ mod node_tests {
                     ],
                     ..JoiningRelocateCandidateState::default()
                 },
-                ..AssertJoiningState::default()
             },
         );
     }
@@ -1909,7 +1855,6 @@ mod node_tests {
                     ],
                     ..JoiningRelocateCandidateState::default()
                 },
-                ..AssertJoiningState::default()
             },
         );
     }
@@ -1968,7 +1913,6 @@ mod node_tests {
                     ],
                     ..JoiningRelocateCandidateState::default()
                 },
-                ..AssertJoiningState::default()
             },
         );
     }
