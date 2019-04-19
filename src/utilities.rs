@@ -206,10 +206,36 @@ pub struct CandidateInfo {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub enum WaitedEvent {
+    Rpc(Rpc),
+    ParsecConsensus(ParsecVote),
+    LocalEvent(LocalEvent),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Event {
     Rpc(Rpc),
     ParsecConsensus(ParsecVote),
     LocalEvent(LocalEvent),
+    TestEvent(TestEvent),
+}
+
+impl Event {
+    pub fn to_waited_event(&self) -> Option<WaitedEvent> {
+        match *self {
+            Event::Rpc(rpc) => Some(WaitedEvent::Rpc(rpc)),
+            Event::ParsecConsensus(parsec_vote) => Some(WaitedEvent::ParsecConsensus(parsec_vote)),
+            Event::LocalEvent(local_event) => Some(WaitedEvent::LocalEvent(local_event)),
+            Event::TestEvent(_test_event) => None,
+        }
+    }
+
+    pub fn to_test_event(&self) -> Option<TestEvent> {
+        match *self {
+            Event::TestEvent(test_event) => Some(test_event),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -356,7 +382,7 @@ pub enum LocalEvent {
     NodeDetectedOffline(Node),
     NodeDetectedBackOnline(Node),
 
-    // Event that should be handled by a flow but are not.
+    // WaitedEvent that should be handled by a flow but are not.
     NotYetImplementedEvent,
     // Unexpected event ignored:
     UnexpectedEventIgnored,
@@ -365,5 +391,17 @@ pub enum LocalEvent {
 impl LocalEvent {
     pub fn to_event(&self) -> Event {
         Event::LocalEvent(*self)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TestEvent {
+    SetMergeNeeded(bool),
+    SetShortestPrefix(Option<Section>),
+}
+
+impl TestEvent {
+    pub fn to_event(self) -> Event {
+        Event::TestEvent(self)
     }
 }

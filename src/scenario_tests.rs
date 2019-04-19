@@ -12,7 +12,7 @@ use crate::{
     utilities::{
         Age, Attributes, Candidate, CandidateInfo, ChangeElder, Event, GenesisPfxInfo, LocalEvent,
         MergeInfo, Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource,
-        RelocatedInfo, Rpc, Section, SectionInfo, State,
+        RelocatedInfo, Rpc, Section, SectionInfo, State, TestEvent,
     },
 };
 use lazy_static::lazy_static;
@@ -440,17 +440,12 @@ mod dst_tests {
 
     #[test]
     fn parsec_expect_candidate_then_parsec_candidate_info_with_shorter_section_exists() {
-        let initial_state = MemberState {
-            action: Action::new(
-                INNER_ACTION_OLD_ELDERS
-                    .clone()
-                    .with_shortest_prefix(Some(OTHER_SECTION_1)),
-            ),
-            ..MemberState::default()
-        };
         let initial_state = arrange_initial_state(
-            &initial_state,
-            &[ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event()],
+            &initial_state_old_elders(),
+            &[
+                TestEvent::SetShortestPrefix(Some(OTHER_SECTION_1)).to_event(),
+                ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
+            ],
         );
 
         run_test(
@@ -866,12 +861,14 @@ mod dst_tests {
     #[test]
     fn parsec_merge_needed() {
         let initial_state = initial_state_old_elders();
-        initial_state.action.set_merge_needed(true);
 
         run_test(
             "Merge needed",
             &initial_state,
-            &[ParsecVote::CheckElder.to_event()],
+            &[
+                TestEvent::SetMergeNeeded(true).to_event(),
+                ParsecVote::CheckElder.to_event(),
+            ],
             &AssertState {
                 action_our_rpcs: vec![Rpc::Merge],
                 ..AssertState::default()

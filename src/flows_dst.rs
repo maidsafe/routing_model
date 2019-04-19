@@ -12,8 +12,8 @@ use crate::{
         StartResourceProofState,
     },
     utilities::{
-        Candidate, CandidateInfo, ChangeElder, Event, LocalEvent, MergeInfo, Name, Node,
-        ParsecVote, Proof, RelocatedInfo, Rpc,
+        Candidate, CandidateInfo, ChangeElder, LocalEvent, MergeInfo, Name, Node, ParsecVote,
+        Proof, RelocatedInfo, Rpc, WaitedEvent,
     },
 };
 use unwrap::unwrap;
@@ -22,10 +22,10 @@ use unwrap::unwrap;
 pub struct RespondToRelocateRequests(pub MemberState);
 
 impl RespondToRelocateRequests {
-    pub fn try_next(&self, event: Event) -> Option<MemberState> {
+    pub fn try_next(&self, event: WaitedEvent) -> Option<MemberState> {
         match event {
-            Event::Rpc(rpc) => self.try_rpc(rpc),
-            Event::ParsecConsensus(vote) => self.try_consensus(vote),
+            WaitedEvent::Rpc(rpc) => self.try_rpc(rpc),
+            WaitedEvent::ParsecConsensus(vote) => self.try_consensus(vote),
             _ => None,
         }
         .map(|state| state.0)
@@ -94,11 +94,11 @@ impl StartRelocatedNodeConnection {
         self.schedule_time_out()
     }
 
-    pub fn try_next(&self, event: Event) -> Option<MemberState> {
+    pub fn try_next(&self, event: WaitedEvent) -> Option<MemberState> {
         match event {
-            Event::Rpc(rpc) => self.try_rpc(rpc),
-            Event::ParsecConsensus(vote) => self.try_consensus(vote),
-            Event::LocalEvent(local_event) => self.try_local_event(local_event),
+            WaitedEvent::Rpc(rpc) => self.try_rpc(rpc),
+            WaitedEvent::ParsecConsensus(vote) => self.try_consensus(vote),
+            WaitedEvent::LocalEvent(local_event) => self.try_local_event(local_event),
         }
         .map(|state| state.0)
     }
@@ -272,13 +272,13 @@ impl StartResourceProof {
         self.clone()
     }
 
-    pub fn try_next(&self, event: Event) -> Option<MemberState> {
+    pub fn try_next(&self, event: WaitedEvent) -> Option<MemberState> {
         match event {
-            Event::Rpc(Rpc::ResourceProofResponse {
+            WaitedEvent::Rpc(Rpc::ResourceProofResponse {
                 candidate, proof, ..
             }) => Some(self.rpc_proof(candidate, proof)),
-            Event::ParsecConsensus(vote) => self.try_consensus(vote),
-            Event::LocalEvent(local_event) => self.try_local_event(local_event),
+            WaitedEvent::ParsecConsensus(vote) => self.try_consensus(vote),
+            WaitedEvent::LocalEvent(local_event) => self.try_local_event(local_event),
             // Delegate to other event loops
             _ => None,
         }
@@ -437,11 +437,11 @@ impl CheckAndProcessElderChange {
         self.start_check_elder_timeout()
     }
 
-    pub fn try_next(&self, event: Event) -> Option<MemberState> {
+    pub fn try_next(&self, event: WaitedEvent) -> Option<MemberState> {
         match event {
-            Event::ParsecConsensus(vote) => self.try_consensus(&vote),
-            Event::Rpc(rpc) => self.try_rpc(rpc),
-            Event::LocalEvent(LocalEvent::TimeoutCheckElder) => {
+            WaitedEvent::ParsecConsensus(vote) => self.try_consensus(&vote),
+            WaitedEvent::Rpc(rpc) => self.try_rpc(rpc),
+            WaitedEvent::LocalEvent(LocalEvent::TimeoutCheckElder) => {
                 Some(self.vote_parsec_check_elder())
             }
             _ => None,
@@ -547,9 +547,9 @@ impl ProcessElderChange {
             .as_process_elder_change()
     }
 
-    pub fn try_next(&self, event: Event) -> Option<MemberState> {
+    pub fn try_next(&self, event: WaitedEvent) -> Option<MemberState> {
         match event {
-            Event::ParsecConsensus(vote) => self.try_consensus(&vote),
+            WaitedEvent::ParsecConsensus(vote) => self.try_consensus(&vote),
             _ => None,
         }
         .map(|state| state.0)
@@ -611,10 +611,10 @@ impl ProcessElderChange {
 pub struct CheckOnlineOffline(pub MemberState);
 
 impl CheckOnlineOffline {
-    pub fn try_next(&self, event: Event) -> Option<MemberState> {
+    pub fn try_next(&self, event: WaitedEvent) -> Option<MemberState> {
         match event {
-            Event::ParsecConsensus(vote) => self.try_consensus(&vote),
-            Event::LocalEvent(local_event) => self.try_local_event(local_event),
+            WaitedEvent::ParsecConsensus(vote) => self.try_consensus(&vote),
+            WaitedEvent::LocalEvent(local_event) => self.try_local_event(local_event),
             // Delegate to other event loops
             _ => None,
         }

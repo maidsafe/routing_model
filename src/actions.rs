@@ -9,7 +9,7 @@
 use crate::utilities::{
     Age, Attributes, Candidate, CandidateInfo, ChangeElder, GenesisPfxInfo, LocalEvent, MergeInfo,
     Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource, RelocatedInfo,
-    Rpc, Section, SectionInfo, State,
+    Rpc, Section, SectionInfo, State, TestEvent,
 };
 use itertools::Itertools;
 use std::{
@@ -99,11 +99,6 @@ impl InnerAction {
         self
     }
 
-    pub fn with_shortest_prefix(mut self, shortest_prefix: Option<Section>) -> Self {
-        self.shortest_prefix = shortest_prefix;
-        self
-    }
-
     fn add_node(&mut self, node_state: NodeState) {
         self.our_nodes
             .push(NodeChange::AddWithState(node_state.node, node_state.state));
@@ -180,6 +175,13 @@ impl Action {
         inner.our_rpc.clear();
         inner.our_nodes.clear();
         inner.our_events.clear();
+    }
+
+    pub fn process_test_events(&self, event: TestEvent) {
+        match event {
+            TestEvent::SetMergeNeeded(value) => self.0.borrow_mut().merge_needed = value,
+            TestEvent::SetShortestPrefix(value) => self.0.borrow_mut().shortest_prefix = value,
+        }
     }
 
     pub fn vote_parsec(&self, vote: ParsecVote) {
@@ -532,10 +534,6 @@ impl Action {
 
     pub fn merge_needed(&self) -> bool {
         self.0.borrow().merge_needed
-    }
-
-    pub fn set_merge_needed(&self, merge_needed: bool) {
-        self.0.borrow_mut().merge_needed = merge_needed;
     }
 }
 

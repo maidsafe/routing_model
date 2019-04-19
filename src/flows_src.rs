@@ -8,7 +8,7 @@
 
 use crate::{
     state::{MemberState, StartRelocateSrcState},
-    utilities::{Candidate, Event, LocalEvent, ParsecVote, RelocatedInfo, Rpc},
+    utilities::{Candidate, LocalEvent, ParsecVote, RelocatedInfo, Rpc, WaitedEvent},
 };
 use unwrap::unwrap;
 
@@ -22,12 +22,12 @@ impl TopLevelSrc {
         self.start_work_unit_timeout()
     }
 
-    pub fn try_next(&self, event: Event) -> Option<MemberState> {
+    pub fn try_next(&self, event: WaitedEvent) -> Option<MemberState> {
         match event {
-            Event::LocalEvent(local_event) => self.try_local_event(local_event),
-            Event::ParsecConsensus(vote) => self.try_consensus(vote),
+            WaitedEvent::LocalEvent(local_event) => self.try_local_event(local_event),
+            WaitedEvent::ParsecConsensus(vote) => self.try_consensus(vote),
 
-            Event::Rpc(_) => None,
+            WaitedEvent::Rpc(_) => None,
         }
         .map(|state| state.0)
     }
@@ -100,11 +100,11 @@ impl StartRelocateSrc {
         self.start_check_relocate_timeout()
     }
 
-    pub fn try_next(&self, event: Event) -> Option<MemberState> {
+    pub fn try_next(&self, event: WaitedEvent) -> Option<MemberState> {
         match event {
-            Event::LocalEvent(local_event) => self.try_local_event(local_event),
-            Event::Rpc(rpc) => self.try_rpc(rpc),
-            Event::ParsecConsensus(vote) => self.try_consensus(vote),
+            WaitedEvent::LocalEvent(local_event) => self.try_local_event(local_event),
+            WaitedEvent::Rpc(rpc) => self.try_rpc(rpc),
+            WaitedEvent::ParsecConsensus(vote) => self.try_consensus(vote),
         }
         .map(|state| state.0)
     }
