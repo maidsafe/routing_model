@@ -139,7 +139,6 @@ lazy_static! {
 struct AssertState {
     action_our_events: Vec<Event>,
     action_our_section: SectionInfo,
-    action_merge_infos: Option<MergeInfo>,
 }
 
 fn process_events(mut state: MemberState, events: &[Event]) -> MemberState {
@@ -170,7 +169,6 @@ fn run_test(
         AssertState {
             action_our_events: action.our_events,
             action_our_section: action.our_section,
-            action_merge_infos: action.merge_infos,
         },
         final_state.failure,
     );
@@ -810,7 +808,7 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[ParsecVote::NeighbourMerge(MergeInfo).to_event()],
             &AssertState {
-                action_merge_infos: Some(MergeInfo),
+                action_our_events: vec![ActionTriggered::MergeInfoStored(MergeInfo).to_event()],
                 ..AssertState::default()
             },
         );
@@ -828,7 +826,6 @@ mod dst_tests {
             &initial_state,
             &[ParsecVote::CheckElder.to_event()],
             &AssertState {
-                action_merge_infos: Some(MergeInfo),
                 action_our_events: vec![Rpc::Merge.to_event()],
                 ..AssertState::default()
             },

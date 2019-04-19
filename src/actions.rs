@@ -138,6 +138,8 @@ impl InnerAction {
 
     fn store_merge_infos(&mut self, merge_info: MergeInfo) {
         self.merge_infos = Some(merge_info);
+        self.our_events
+            .push(ActionTriggered::MergeInfoStored(merge_info).to_event());
     }
 }
 

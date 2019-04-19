@@ -414,6 +414,7 @@ impl TestEvent {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ActionTriggered {
     WorkUnitIncremented,
+    MergeInfoStored(MergeInfo),
 
     // WaitedEvent that should be handled by a flow but are not.
     NotYetImplementedErrorTriggered,
