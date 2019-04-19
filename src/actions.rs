@@ -195,19 +195,19 @@ impl Action {
     }
 
     pub fn add_node_waiting_candidate_info(&self, candidate: Candidate) -> RelocatedInfo {
-        let target_interval_center = self.0.borrow().next_target_interval;
+        let target_interval_centre = self.0.borrow().next_target_interval;
         self.0.borrow_mut().next_target_interval.0 += 1;
 
         let info = RelocatedInfo {
             candidate,
             expected_age: Age(candidate.0.age + 1),
-            target_interval_center,
+            target_interval_centre,
             section_info: self.0.borrow().our_section,
         };
 
         let state = NodeState {
             node: Node(Attributes {
-                name: info.target_interval_center.0,
+                name: info.target_interval_centre.0,
                 age: info.expected_age.0,
             }),
             state: State::WaitingCandidateInfo(info),
@@ -373,6 +373,7 @@ impl Action {
                     state.state == State::RelocatingHop,
                     state.state == State::RelocatingBackOnline,
                     state.node.0.age(),
+                    state.node.0.name(),
                 )
             })
             .map(|state| (Candidate(state.node.0), Section::default()))
@@ -387,7 +388,7 @@ impl Action {
             .unwrap_or(false)
     }
 
-    pub fn waiting_node_connecting(&self) -> BTreeSet<Name> {
+    pub fn waiting_nodes_connecting(&self) -> BTreeSet<Name> {
         self.0
             .borrow()
             .our_current_nodes

@@ -43,9 +43,10 @@ const CANDIDATE_205: Candidate = Candidate(Attributes { name: 205, age: 5 });
 const OTHER_SECTION_1: Section = Section(1);
 const DST_SECTION_200: Section = Section(200);
 
+const NODE_1_OLD: Node = Node(ATTRIBUTES_1_OLD);
 const NODE_1: Node = Node(ATTRIBUTES_1);
-const NODE_2: Node = Node(ATTRIBUTES_2);
 const NODE_2_OLD: Node = Node(ATTRIBUTES_2_OLD);
+const NODE_2: Node = Node(ATTRIBUTES_2);
 const SET_ONLINE_NODE_1: NodeChange = NodeChange::State(Node(ATTRIBUTES_1), State::Online);
 const REMOVE_NODE_1: NodeChange = NodeChange::Remove(Name(ATTRIBUTES_1.name));
 
@@ -75,7 +76,7 @@ const CANDIDATE_INFO_VALID_1: CandidateInfo = CandidateInfo {
 const CANDIDATE_RELOCATED_INFO_1: RelocatedInfo = RelocatedInfo {
     candidate: CANDIDATE_1_OLD,
     expected_age: Age(CANDIDATE_1_OLD.0.age + 1),
-    target_interval_center: TARGET_INTERVAL_1,
+    target_interval_centre: TARGET_INTERVAL_1,
     section_info: OUR_INITIAL_SECTION_INFO,
 };
 
@@ -233,7 +234,7 @@ fn get_relocated_info(candidate: Candidate, section_info: SectionInfo) -> Reloca
     RelocatedInfo {
         candidate,
         expected_age: Age(candidate.0.age + 1),
-        target_interval_center: TARGET_INTERVAL_1,
+        target_interval_centre: TARGET_INTERVAL_1,
         section_info,
     }
 }
@@ -965,8 +966,9 @@ mod dst_tests {
             ],
         );
 
-        let description = "Get Parsec ExpectCandidate then Online (Elder Change) RemoveElderNode for wrong elder,\
-            AddElderNode for wrong node, NewSectionInfo for wrong section";
+        let description =
+            "Get Parsec ExpectCandidate then Online (Elder Change) RemoveElderNode \
+             for wrong elder, AddElderNode for wrong node, NewSectionInfo for wrong section";
         run_test(
             description,
             &initial_state,
@@ -1094,7 +1096,7 @@ mod dst_tests {
                     State::WaitingCandidateInfo(RelocatedInfo {
                         candidate: CANDIDATE_2_OLD,
                         expected_age: CANDIDATE_2.0.age(),
-                        target_interval_center: TARGET_INTERVAL_2,
+                        target_interval_centre: TARGET_INTERVAL_2,
                         section_info: OUR_NEXT_SECTION_INFO,
                     }),
                 )],
@@ -1102,7 +1104,7 @@ mod dst_tests {
                 action_our_rpcs: vec![Rpc::RelocateResponse(RelocatedInfo {
                     candidate: CANDIDATE_2_OLD,
                     expected_age: CANDIDATE_2.0.age(),
-                    target_interval_center: TARGET_INTERVAL_2,
+                    target_interval_centre: TARGET_INTERVAL_2,
                     section_info: OUR_NEXT_SECTION_INFO,
                 })],
                 ..AssertState::default()
@@ -1385,21 +1387,24 @@ mod src_tests {
                             state: State::RelocatingHop,
                             ..NodeState::default()
                         },
-                        &[NODE_1],
+                        &[NODE_1_OLD],
                     )
                     .extend_current_nodes_with(
                         &NodeState {
                             state: State::RelocatingBackOnline,
                             ..NodeState::default()
                         },
-                        &[NODE_2, NODE_2_OLD],
+                        &[NODE_2, NODE_2_OLD, NODE_1],
                     ),
             ),
             ..MemberState::default()
         };
 
+        let description = "RelocatingHop or RelocatingBackOnline does not stop relocating our \
+        adults. Also relocated nodes are relocated AgeIncrease, then Hop, then BackOnline, break \
+        tie by age then name";
         run_test(
-            "RelocatingHop does not stop relocating our adults. Also relocated second",
+            description,
             &initial_state,
             &[
                 ParsecVote::WorkUnitIncrement.to_event(),
@@ -1411,7 +1416,7 @@ mod src_tests {
             &AssertState {
                 action_our_rpcs: vec![
                     Rpc::ExpectCandidate(CANDIDATE_205),
-                    Rpc::ExpectCandidate(CANDIDATE_1),
+                    Rpc::ExpectCandidate(CANDIDATE_1_OLD),
                     Rpc::ExpectCandidate(CANDIDATE_2),
                     Rpc::ExpectCandidate(CANDIDATE_205),
                 ],

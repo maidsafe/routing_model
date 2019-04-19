@@ -398,7 +398,7 @@
       ParsecConsensus((Consensus))
 
       ParsecConsensus -- "Parsec::CheckRelocatedNodeConnection" --> CleanCandidates
-      CleanCandidates["for candidate in both<br/>-waiting_node_connecting()<br/>-CANDIDATES:<br/><br/>purge_node_info(candidate)<br/><br/>CANDIDATES_INFO<br/>.retain(|(k,v)|is_valid_waited_info(v))<br/>CANDIDATES_VOTED<br/>.retain(|src| CANDIDATES_INFO.contains_key(src))<br/>CANDIDATES=waiting_node_connecting()<br/><br/>(reject candidates that took too long)"]
+      CleanCandidates["for candidate in both<br/>-waiting_nodes_connecting()<br/>-CANDIDATES:<br/><br/>purge_node_info(candidate)<br/><br/>CANDIDATES_INFO<br/>.retain(|(k,v)|is_valid_waited_info(v))<br/>CANDIDATES_VOTED<br/>.retain(|src| CANDIDATES_INFO.contains_key(src))<br/>CANDIDATES=waiting_nodes_connecting()<br/><br/>(reject candidates that took too long)"]
       CleanCandidates --> ReStartCheckRelocatedNodeConnectionTimeout
       ReStartCheckRelocatedNodeConnectionTimeout["schedule(<br/>CheckRelocatedNodeConnectionTimeout)"]
       ReStartCheckRelocatedNodeConnectionTimeout --> LoopEnd
@@ -709,7 +709,7 @@
     Using a target address instead of a section ensures we deliver the message even if the destination splits or merges.<br/>
     <br/>
     There are 3 states the node may be: State::RelocatingAgeIncrease, State::RelocatingHop, and State::RelocatingBackOnline.<br/>
-    Nodes will be selected in this order: State::RelocatingAgeIncrease, State::RelocatingHop and then State::RelocatingBackOnline.<br/>
+    Nodes will be selected in this order: State::RelocatingAgeIncrease, State::RelocatingHop and then State::RelocatingBackOnline and tie break by age then name.<br/>
     This ensures that we prioritise good node relocation.
     <br/>
     Note: It may be possible for a node to relocate to its sibling, and complete relocation after a merge occurred.

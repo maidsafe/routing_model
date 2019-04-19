@@ -60,7 +60,7 @@ pub enum NodeChange {
 pub struct RelocatedInfo {
     pub candidate: Candidate,
     pub expected_age: Age,
-    pub target_interval_center: Name,
+    pub target_interval_centre: Name,
     pub section_info: SectionInfo,
 }
 
@@ -77,13 +77,13 @@ pub enum State {
     Online,
     // Relocating an adult that has reached its work unit count
     RelocatingAgeIncrease,
-    // Relocating to a new hop with a shorter section
+    // Relocating to a new hop with a shorter section prefix
     RelocatingHop,
     // Relocating back online node
     RelocatingBackOnline,
     // Complete relocation, only waiting for info to be processed
     Relocated(RelocatedInfo),
-    // Not a full adult/Not known pubilc id: still wait candidate info / connection
+    // Not a full adult / Not known public id: still wait candidate info / connection
     WaitingCandidateInfo(RelocatedInfo),
     // Not a full adult: still wait proofing
     WaitingProofing,

@@ -115,7 +115,7 @@ impl StartRelocatedNodeConnection {
 
     fn try_consensus(&self, vote: ParsecVote) -> Option<Self> {
         match vote {
-            ParsecVote::CandidateConnected(info) => Some(self.check_candidate_connnected(info)),
+            ParsecVote::CandidateConnected(info) => Some(self.check_candidate_connected(info)),
             ParsecVote::CheckRelocatedNodeConnection => Some(
                 self.reject_candidates_that_took_too_long()
                     .schedule_time_out(),
@@ -162,7 +162,7 @@ impl StartRelocatedNodeConnection {
         }
     }
 
-    fn check_candidate_connnected(&self, info: CandidateInfo) -> Self {
+    fn check_candidate_connected(&self, info: CandidateInfo) -> Self {
         if self.0.action.is_valid_waited_info(info) {
             self.check_update_to_node(info)
                 .send_node_connected_rpc(info)
@@ -194,17 +194,17 @@ impl StartRelocatedNodeConnection {
     fn reject_candidates_that_took_too_long(&self) -> Self {
         let mut state = self.clone();
 
-        let new_connecting_nodes = state.0.action.waiting_node_connecting();
-        let node_to_remove: Vec<Name> = new_connecting_nodes
+        let new_connecting_nodes = state.0.action.waiting_nodes_connecting();
+        let nodes_to_remove: Vec<Name> = new_connecting_nodes
             .intersection(&state.routine_state().candidates)
             .cloned()
             .collect();
 
-        for name in node_to_remove {
+        for name in nodes_to_remove {
             state.0.action.purge_node_info(name);
         }
 
-        let candidates = state.0.action.waiting_node_connecting();
+        let candidates = state.0.action.waiting_nodes_connecting();
         let mut_routine_state = &mut state.mut_routine_state();
 
         mut_routine_state.candidates = candidates.clone();
