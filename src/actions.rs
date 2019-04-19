@@ -74,14 +74,6 @@ impl InnerAction {
         self.extend_current_nodes(&node_states)
     }
 
-    pub fn with_enough_work_to_relocate(mut self, nodes: &[Node]) -> Self {
-        self.our_current_nodes
-            .values_mut()
-            .filter(|state| nodes.contains(&state.node))
-            .for_each(|state| state.work_units_done = state.node.0.age);
-        self
-    }
-
     pub fn with_section_members(mut self, section: SectionInfo, nodes: &[Node]) -> Self {
         let inserted = self.section_members.insert(section, nodes.to_vec());
         assert!(inserted.is_none());
@@ -167,9 +159,21 @@ impl Action {
     }
 
     pub fn process_test_events(&self, event: TestEvent) {
+        let set_enough_work_to_relocate = |name: Name| {
+            let _ = self
+                .0
+                .borrow_mut()
+                .our_current_nodes
+                .get_mut(&name)
+                .map(|state| state.work_units_done = state.node.0.age);
+        };
+
         match event {
             TestEvent::SetMergeNeeded(value) => self.0.borrow_mut().merge_needed = value,
             TestEvent::SetShortestPrefix(value) => self.0.borrow_mut().shortest_prefix = value,
+            TestEvent::SetWorkUnitEnoughToRelocate(node) => {
+                set_enough_work_to_relocate(node.name())
+            }
         }
     }
 

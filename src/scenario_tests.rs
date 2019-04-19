@@ -1241,19 +1241,11 @@ mod src_tests {
 
     #[test]
     fn start_relocation() {
-        let initial_state = MemberState {
-            action: Action::new(
-                INNER_ACTION_OLD_ELDERS
-                    .clone()
-                    .with_enough_work_to_relocate(&[YOUNG_ADULT_205]),
-            ),
-            ..MemberState::default()
-        };
-
         run_test(
             "Trigger events to relocate node",
-            &initial_state,
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
             ],
@@ -1270,15 +1262,9 @@ mod src_tests {
     #[test]
     fn parsec_check_relocate_trigger_again_no_retry() {
         let initial_state = arrange_initial_state(
-            &MemberState {
-                action: Action::new(
-                    INNER_ACTION_OLD_ELDERS
-                        .clone()
-                        .with_enough_work_to_relocate(&[YOUNG_ADULT_205]),
-                ),
-                ..MemberState::default()
-            },
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
             ],
@@ -1298,15 +1284,9 @@ mod src_tests {
     #[test]
     fn parsec_relocation_trigger_again_until_retry() {
         let initial_state = arrange_initial_state(
-            &MemberState {
-                action: Action::new(
-                    INNER_ACTION_OLD_ELDERS
-                        .clone()
-                        .with_enough_work_to_relocate(&[YOUNG_ADULT_205]),
-                ),
-                ..MemberState::default()
-            },
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
@@ -1331,7 +1311,6 @@ mod src_tests {
             action: Action::new(
                 INNER_ACTION_OLD_ELDERS
                     .clone()
-                    .with_enough_work_to_relocate(&[YOUNG_ADULT_205])
                     .extend_current_nodes_with(
                         &NodeState {
                             state: State::RelocatingHop,
@@ -1357,6 +1336,7 @@ mod src_tests {
             description,
             &initial_state,
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
@@ -1378,19 +1358,11 @@ mod src_tests {
 
     #[test]
     fn parsec_relocate_trigger_elder_change() {
-        let initial_state = MemberState {
-            action: Action::new(
-                INNER_ACTION_OLD_ELDERS
-                    .clone()
-                    .with_enough_work_to_relocate(&[NODE_ELDER_130]),
-            ),
-            ..MemberState::default()
-        };
-
         run_test(
             "Get Parsec ExpectCandidate then Online (Elder Change)",
-            &initial_state,
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(NODE_ELDER_130).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
                 ParsecVote::CheckElder.to_event(),
@@ -1410,15 +1382,9 @@ mod src_tests {
     #[test]
     fn parsec_relocate_trigger_elder_change_complete() {
         let initial_state = arrange_initial_state(
-            &MemberState {
-                action: Action::new(
-                    INNER_ACTION_OLD_ELDERS
-                        .clone()
-                        .with_enough_work_to_relocate(&[NODE_ELDER_130]),
-                ),
-                ..MemberState::default()
-            },
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(NODE_ELDER_130).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckElder.to_event(),
             ],
@@ -1449,15 +1415,9 @@ mod src_tests {
     #[test]
     fn parsec_relocation_trigger_refuse_candidate_rpc() {
         let initial_state = arrange_initial_state(
-            &MemberState {
-                action: Action::new(
-                    INNER_ACTION_OLD_ELDERS
-                        .clone()
-                        .with_enough_work_to_relocate(&[YOUNG_ADULT_205]),
-                ),
-                ..MemberState::default()
-            },
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
             ],
@@ -1477,15 +1437,9 @@ mod src_tests {
     #[test]
     fn parsec_relocation_trigger_relocate_response_rpc() {
         let initial_state = arrange_initial_state(
-            &MemberState {
-                action: Action::new(
-                    INNER_ACTION_OLD_ELDERS
-                        .clone()
-                        .with_enough_work_to_relocate(&[YOUNG_ADULT_205]),
-                ),
-                ..MemberState::default()
-            },
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
             ],
@@ -1512,15 +1466,9 @@ mod src_tests {
     #[test]
     fn parsec_relocation_trigger_accept() {
         let initial_state = arrange_initial_state(
-            &MemberState {
-                action: Action::new(
-                    INNER_ACTION_OLD_ELDERS
-                        .clone()
-                        .with_enough_work_to_relocate(&[YOUNG_ADULT_205]),
-                ),
-                ..MemberState::default()
-            },
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
             ],
@@ -1562,15 +1510,9 @@ mod src_tests {
     #[test]
     fn parsec_relocation_trigger_refuse() {
         let initial_state = arrange_initial_state(
-            &MemberState {
-                action: Action::new(
-                    INNER_ACTION_OLD_ELDERS
-                        .clone()
-                        .with_enough_work_to_relocate(&[YOUNG_ADULT_205]),
-                ),
-                ..MemberState::default()
-            },
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
             ],
@@ -1587,15 +1529,9 @@ mod src_tests {
     #[test]
     fn parsec_relocation_trigger_refuse_trigger_again() {
         let initial_state = arrange_initial_state(
-            &MemberState {
-                action: Action::new(
-                    INNER_ACTION_OLD_ELDERS
-                        .clone()
-                        .with_enough_work_to_relocate(&[YOUNG_ADULT_205]),
-                ),
-                ..MemberState::default()
-            },
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
                 ParsecVote::RefuseCandidate(CANDIDATE_205).to_event(),
@@ -1616,15 +1552,9 @@ mod src_tests {
     #[test]
     fn parsec_relocation_trigger_elder_change_refuse_trigger_again() {
         let initial_state = arrange_initial_state(
-            &MemberState {
-                action: Action::new(
-                    INNER_ACTION_OLD_ELDERS
-                        .clone()
-                        .with_enough_work_to_relocate(&[NODE_ELDER_130]),
-                ),
-                ..MemberState::default()
-            },
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(NODE_ELDER_130).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckElder.to_event(),
                 ParsecVote::RemoveElderNode(NODE_ELDER_130).to_event(),

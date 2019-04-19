@@ -405,6 +405,7 @@ impl LocalEvent {
 pub enum TestEvent {
     SetMergeNeeded(bool),
     SetShortestPrefix(Option<Section>),
+    SetWorkUnitEnoughToRelocate(Node),
 }
 
 impl TestEvent {
