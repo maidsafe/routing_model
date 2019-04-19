@@ -7,9 +7,9 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::utilities::{
-    Age, Attributes, Candidate, CandidateInfo, ChangeElder, GenesisPfxInfo, LocalEvent, MergeInfo,
-    Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource, RelocatedInfo,
-    Rpc, Section, SectionInfo, State, TestEvent,
+    Age, Attributes, Candidate, CandidateInfo, ChangeElder, Event, GenesisPfxInfo, LocalEvent,
+    MergeInfo, Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource,
+    RelocatedInfo, Rpc, Section, SectionInfo, State, TestEvent,
 };
 use itertools::Itertools;
 use std::{
@@ -26,10 +26,7 @@ pub struct InnerAction {
     pub our_section: SectionInfo,
     pub our_current_nodes: BTreeMap<Name, NodeState>,
 
-    pub our_votes: Vec<ParsecVote>,
-    pub our_rpc: Vec<Rpc>,
-    pub our_events: Vec<LocalEvent>,
-    pub our_nodes: Vec<NodeChange>,
+    pub our_events: Vec<Event>,
 
     pub shortest_prefix: Option<Section>,
     pub section_members: BTreeMap<SectionInfo, Vec<Node>>,
@@ -46,10 +43,7 @@ impl InnerAction {
             our_section: Default::default(),
             our_current_nodes: Default::default(),
 
-            our_votes: Default::default(),
-            our_rpc: Default::default(),
             our_events: Default::default(),
-            our_nodes: Default::default(),
 
             shortest_prefix: Default::default(),
             section_members: Default::default(),
@@ -100,8 +94,8 @@ impl InnerAction {
     }
 
     fn add_node(&mut self, node_state: NodeState) {
-        self.our_nodes
-            .push(NodeChange::AddWithState(node_state.node, node_state.state));
+        self.our_events
+            .push(NodeChange::AddWithState(node_state.node, node_state.state).to_event());
         let inserted = self
             .our_current_nodes
             .insert(node_state.node.name(), node_state);
@@ -109,16 +103,13 @@ impl InnerAction {
     }
 
     fn remove_node(&mut self, name: Name) {
-        self.our_nodes.push(NodeChange::Remove(name));
+        self.our_events.push(NodeChange::Remove(name).to_event());
         unwrap!(self.our_current_nodes.remove(&name));
     }
 
     fn replace_node(&mut self, node_name: Name, node_state: NodeState) {
-        self.our_nodes.push(NodeChange::ReplaceWith(
-            node_name,
-            node_state.node,
-            node_state.state,
-        ));
+        self.our_events
+            .push(NodeChange::ReplaceWith(node_name, node_state.node, node_state.state).to_event());
 
         let removed = self.our_current_nodes.remove(&node_name);
         let inserted = self
@@ -137,14 +128,16 @@ impl InnerAction {
         let node = &mut self.our_current_nodes.get_mut(&name).unwrap();
 
         node.state = state;
-        self.our_nodes.push(NodeChange::State(node.node, state));
+        self.our_events
+            .push(NodeChange::State(node.node, state).to_event());
     }
 
     fn set_elder_state(&mut self, name: Name, value: bool) {
         let node = &mut self.our_current_nodes.get_mut(&name).unwrap();
 
         node.is_elder = value;
-        self.our_nodes.push(NodeChange::Elder(node.node, value));
+        self.our_events
+            .push(NodeChange::Elder(node.node, value).to_event());
     }
 
     fn set_section_info(&mut self, section: SectionInfo) {
@@ -170,10 +163,6 @@ impl Action {
 
     pub fn remove_processed_state(&self) {
         let inner = &mut self.0.borrow_mut();
-
-        inner.our_votes.clear();
-        inner.our_rpc.clear();
-        inner.our_nodes.clear();
         inner.our_events.clear();
     }
 
@@ -185,15 +174,15 @@ impl Action {
     }
 
     pub fn vote_parsec(&self, vote: ParsecVote) {
-        self.0.borrow_mut().our_votes.push(vote);
+        self.0.borrow_mut().our_events.push(vote.to_event());
     }
 
     pub fn send_rpc(&self, rpc: Rpc) {
-        self.0.borrow_mut().our_rpc.push(rpc);
+        self.0.borrow_mut().our_events.push(rpc.to_event());
     }
 
     pub fn schedule_event(&self, event: LocalEvent) {
-        self.0.borrow_mut().our_events.push(event);
+        self.0.borrow_mut().our_events.push(event.to_event());
     }
 
     pub fn add_node_waiting_candidate_info(&self, candidate: Candidate) -> RelocatedInfo {

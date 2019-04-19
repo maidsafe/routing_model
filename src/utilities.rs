@@ -56,6 +56,12 @@ pub enum NodeChange {
     Elder(Node, bool),
 }
 
+impl NodeChange {
+    pub fn to_event(self) -> Event {
+        Event::NodeChange(self)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct RelocatedInfo {
     pub candidate: Candidate,
@@ -218,6 +224,7 @@ pub enum Event {
     ParsecConsensus(ParsecVote),
     LocalEvent(LocalEvent),
     TestEvent(TestEvent),
+    NodeChange(NodeChange),
 }
 
 impl Event {
@@ -226,7 +233,7 @@ impl Event {
             Event::Rpc(rpc) => Some(WaitedEvent::Rpc(rpc)),
             Event::ParsecConsensus(parsec_vote) => Some(WaitedEvent::ParsecConsensus(parsec_vote)),
             Event::LocalEvent(local_event) => Some(WaitedEvent::LocalEvent(local_event)),
-            Event::TestEvent(_test_event) => None,
+            Event::TestEvent(_) | Event::NodeChange(_) => None,
         }
     }
 
