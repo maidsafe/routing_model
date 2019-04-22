@@ -13,7 +13,7 @@ use crate::{
     },
     utilities::{
         Candidate, CandidateInfo, ChangeElder, LocalEvent, MergeInfo, Name, Node, ParsecVote,
-        Proof, RelocatedInfo, Rpc, WaitedEvent,
+        Proof, RelocatedInfo, Rpc, TryResult, WaitedEvent,
     },
 };
 use unwrap::unwrap;
@@ -22,33 +22,37 @@ use unwrap::unwrap;
 pub struct RespondToRelocateRequests<'a>(pub &'a mut MemberState);
 
 impl<'a> RespondToRelocateRequests<'a> {
-    pub fn try_next(&mut self, event: WaitedEvent) -> Option<()> {
+    pub fn try_next(&mut self, event: WaitedEvent) -> TryResult {
         match event {
             WaitedEvent::Rpc(rpc) => self.try_rpc(rpc),
             WaitedEvent::ParsecConsensus(vote) => self.try_consensus(vote),
-            _ => None,
+            _ => TryResult::Unhandled,
         }
     }
 
-    fn try_rpc(&mut self, rpc: Rpc) -> Option<()> {
+    fn try_rpc(&mut self, rpc: Rpc) -> TryResult {
         match rpc {
-            Rpc::ExpectCandidate(candidate) => Some(self.vote_parsec_expect_candidate(candidate)),
-            _ => None,
+            Rpc::ExpectCandidate(candidate) => {
+                self.vote_parsec_expect_candidate(candidate);
+                TryResult::Handled
+            }
+            _ => TryResult::Unhandled,
         }
     }
 
-    fn try_consensus(&mut self, vote: ParsecVote) -> Option<()> {
+    fn try_consensus(&mut self, vote: ParsecVote) -> TryResult {
         match vote {
             ParsecVote::ExpectCandidate(candidate) => {
-                Some(self.try_consensused_expect_candidate(candidate))
+                self.consensused_expect_candidate(candidate);
+                TryResult::Handled
             }
 
             // Delegate to other event loops
-            _ => None,
+            _ => TryResult::Unhandled,
         }
     }
 
-    fn try_consensused_expect_candidate(&mut self, candidate: Candidate) {
+    fn consensused_expect_candidate(&mut self, candidate: Candidate) {
         match (
             self.0.action.get_waiting_candidate_info(candidate),
             self.0.action.count_waiting_proofing_or_hop(),
@@ -89,7 +93,7 @@ impl<'a> StartRelocatedNodeConnection<'a> {
         self.schedule_time_out()
     }
 
-    pub fn try_next(&mut self, event: WaitedEvent) -> Option<()> {
+    pub fn try_next(&mut self, event: WaitedEvent) -> TryResult {
         match event {
             WaitedEvent::Rpc(rpc) => self.try_rpc(rpc),
             WaitedEvent::ParsecConsensus(vote) => self.try_consensus(vote),
@@ -97,38 +101,46 @@ impl<'a> StartRelocatedNodeConnection<'a> {
         }
     }
 
-    fn try_rpc(&mut self, rpc: Rpc) -> Option<()> {
+    fn try_rpc(&mut self, rpc: Rpc) -> TryResult {
         match rpc {
-            Rpc::CandidateInfo(info) => Some(self.rpc_info(info)),
+            Rpc::CandidateInfo(info) => {
+                self.rpc_info(info);
+                TryResult::Handled
+            }
             Rpc::ConnectionInfoResponse { .. } => {
                 self.try_connect_and_vote_parsec_candidate_connected(rpc)
             }
-            _ => None,
+            _ => TryResult::Unhandled,
         }
     }
 
-    fn try_consensus(&mut self, vote: ParsecVote) -> Option<()> {
+    fn try_consensus(&mut self, vote: ParsecVote) -> TryResult {
         match vote {
-            ParsecVote::CandidateConnected(info) => Some(self.check_candidate_connected(info)),
-            ParsecVote::CheckRelocatedNodeConnection => Some({
+            ParsecVote::CandidateConnected(info) => {
+                self.check_candidate_connected(info);
+                TryResult::Handled
+            }
+            ParsecVote::CheckRelocatedNodeConnection => {
                 self.reject_candidates_that_took_too_long();
-                self.schedule_time_out()
-            }),
+                self.schedule_time_out();
+                TryResult::Handled
+            }
             // Delegate to other event loops
-            _ => None,
+            _ => TryResult::Unhandled,
         }
     }
 
-    fn try_local_event(&mut self, local_event: LocalEvent) -> Option<()> {
+    fn try_local_event(&mut self, local_event: LocalEvent) -> TryResult {
         match local_event {
             LocalEvent::CheckRelocatedNodeConnectionTimeout => {
-                Some(self.vote_parsec_check_relocated_node_connection())
+                self.vote_parsec_check_relocated_node_connection();
+                TryResult::Handled
             }
-            _ => None,
+            _ => TryResult::Unhandled,
         }
     }
 
-    fn try_connect_and_vote_parsec_candidate_connected(&mut self, rpc: Rpc) -> Option<()> {
+    fn try_connect_and_vote_parsec_candidate_connected(&mut self, rpc: Rpc) -> TryResult {
         if let Rpc::ConnectionInfoResponse { source, .. } = rpc {
             if !self.routine_state().candidates_voted.contains(&source) {
                 if let Some(info) = self.routine_state().candidates_info.get(&source) {
@@ -137,12 +149,12 @@ impl<'a> StartRelocatedNodeConnection<'a> {
                         .vote_parsec(ParsecVote::CandidateConnected(*info));
                     let _ = self.mut_routine_state().candidates_voted.insert(source);
 
-                    return Some(());
+                    return TryResult::Handled;
                 }
             }
         }
 
-        None
+        TryResult::Unhandled
     }
 
     fn rpc_info(&mut self, info: CandidateInfo) {
@@ -247,15 +259,18 @@ impl<'a> StartResourceProof<'a> {
             .schedule_event(LocalEvent::CheckResourceProofTimeout);
     }
 
-    pub fn try_next(&mut self, event: WaitedEvent) -> Option<()> {
+    pub fn try_next(&mut self, event: WaitedEvent) -> TryResult {
         match event {
             WaitedEvent::Rpc(Rpc::ResourceProofResponse {
                 candidate, proof, ..
-            }) => Some(self.rpc_proof(candidate, proof)),
+            }) => {
+                self.rpc_proof(candidate, proof);
+                TryResult::Handled
+            }
             WaitedEvent::ParsecConsensus(vote) => self.try_consensus(vote),
             WaitedEvent::LocalEvent(local_event) => self.try_local_event(local_event),
             // Delegate to other event loops
-            _ => None,
+            _ => TryResult::Unhandled,
         }
     }
 
@@ -276,28 +291,44 @@ impl<'a> StartResourceProof<'a> {
         }
     }
 
-    fn try_consensus(&mut self, vote: ParsecVote) -> Option<()> {
+    fn try_consensus(&mut self, vote: ParsecVote) -> TryResult {
         let for_candidate = self.has_candidate() && vote.candidate() == Some(self.candidate());
 
         match vote {
-            ParsecVote::CheckResourceProof => Some({
+            ParsecVote::CheckResourceProof => {
                 self.set_resource_proof_candidate();
                 self.check_request_resource_proof();
-            }),
-            ParsecVote::Online(_) if for_candidate => Some(self.make_node_online()),
-            ParsecVote::PurgeCandidate(_) if for_candidate => Some(self.purge_node_info()),
-            ParsecVote::Online(_) | ParsecVote::PurgeCandidate(_) => Some(self.discard()),
+                TryResult::Handled
+            }
+            ParsecVote::Online(_) if for_candidate => {
+                self.make_node_online();
+                TryResult::Handled
+            }
+            ParsecVote::PurgeCandidate(_) if for_candidate => {
+                self.purge_node_info();
+                TryResult::Handled
+            }
+            ParsecVote::Online(_) | ParsecVote::PurgeCandidate(_) => {
+                self.discard();
+                TryResult::Handled
+            }
 
             // Delegate to other event loops
-            _ => None,
+            _ => TryResult::Unhandled,
         }
     }
 
-    fn try_local_event(&mut self, local_event: LocalEvent) -> Option<()> {
+    fn try_local_event(&mut self, local_event: LocalEvent) -> TryResult {
         match local_event {
-            LocalEvent::TimeoutAccept => Some(self.vote_parsec_purge_candidate()),
-            LocalEvent::CheckResourceProofTimeout => Some(self.vote_parsec_check_resource_proof()),
-            _ => None,
+            LocalEvent::TimeoutAccept => {
+                self.vote_parsec_purge_candidate();
+                TryResult::Handled
+            }
+            LocalEvent::CheckResourceProofTimeout => {
+                self.vote_parsec_check_resource_proof();
+                TryResult::Handled
+            }
+            _ => TryResult::Unhandled,
         }
     }
 
@@ -399,29 +430,40 @@ impl<'a> CheckAndProcessElderChange<'a> {
         self.start_check_elder_timeout()
     }
 
-    pub fn try_next(&mut self, event: WaitedEvent) -> Option<()> {
+    pub fn try_next(&mut self, event: WaitedEvent) -> TryResult {
         match event {
             WaitedEvent::ParsecConsensus(vote) => self.try_consensus(&vote),
             WaitedEvent::Rpc(rpc) => self.try_rpc(rpc),
             WaitedEvent::LocalEvent(LocalEvent::TimeoutCheckElder) => {
-                Some(self.vote_parsec_check_elder())
+                self.vote_parsec_check_elder();
+                TryResult::Handled
             }
-            _ => None,
+            _ => TryResult::Unhandled,
         }
     }
 
-    fn try_consensus(&mut self, vote: &ParsecVote) -> Option<()> {
+    fn try_consensus(&mut self, vote: &ParsecVote) -> TryResult {
         match vote {
-            ParsecVote::NeighbourMerge(merge_info) => Some(self.store_merge_infos(*merge_info)),
-            ParsecVote::CheckElder => Some(self.check_merge()),
-            _ => None,
+            ParsecVote::NeighbourMerge(merge_info) => {
+                self.store_merge_infos(*merge_info);
+                TryResult::Handled
+            }
+            ParsecVote::CheckElder => {
+                self.check_merge();
+                TryResult::Handled
+            }
+            _ => TryResult::Unhandled,
         }
     }
 
-    fn try_rpc(&mut self, rpc: Rpc) -> Option<()> {
+    fn try_rpc(&mut self, rpc: Rpc) -> TryResult {
         match rpc {
-            Rpc::Merge => Some(self.vote_parsec_neighbour_merge()),
-            _ => None,
+            Rpc::Merge => {
+                self.vote_parsec_neighbour_merge();
+                TryResult::Handled
+            }
+
+            _ => TryResult::Unhandled,
         }
     }
 
@@ -496,29 +538,26 @@ impl<'a> ProcessElderChange<'a> {
             .transition_exit_process_elder_change()
     }
 
-    pub fn try_next(&mut self, event: WaitedEvent) -> Option<()> {
+    pub fn try_next(&mut self, event: WaitedEvent) -> TryResult {
         match event {
             WaitedEvent::ParsecConsensus(vote) => self.try_consensus(&vote),
-            _ => None,
+            _ => TryResult::Unhandled,
         }
     }
 
-    fn try_consensus(&mut self, vote: &ParsecVote) -> Option<()> {
+    fn try_consensus(&mut self, vote: &ParsecVote) -> TryResult {
         if !self.routine_state().wait_votes.contains(&vote) {
-            return None;
+            return TryResult::Unhandled;
         }
 
         let wait_votes = &mut self.mut_routine_state().wait_votes;
         wait_votes.retain(|wait_vote| wait_vote != vote);
 
         if wait_votes.is_empty() {
-            Some({
-                self.mark_elder_change();
-                self.exit_event_loop()
-            })
-        } else {
-            Some(())
+            self.mark_elder_change();
+            self.exit_event_loop();
         }
+        TryResult::Handled
     }
 
     fn vote_for_elder_change(&mut self, change_elder: ChangeElder) {
@@ -555,30 +594,42 @@ impl<'a> ProcessElderChange<'a> {
 pub struct CheckOnlineOffline<'a>(pub &'a mut MemberState);
 
 impl<'a> CheckOnlineOffline<'a> {
-    pub fn try_next(&mut self, event: WaitedEvent) -> Option<()> {
+    pub fn try_next(&mut self, event: WaitedEvent) -> TryResult {
         match event {
             WaitedEvent::ParsecConsensus(vote) => self.try_consensus(&vote),
             WaitedEvent::LocalEvent(local_event) => self.try_local_event(local_event),
             // Delegate to other event loops
-            _ => None,
+            _ => TryResult::Unhandled,
         }
     }
 
-    fn try_consensus(&mut self, vote: &ParsecVote) -> Option<()> {
+    fn try_consensus(&mut self, vote: &ParsecVote) -> TryResult {
         match vote {
-            ParsecVote::Offline(node) => Some(self.make_node_offline(*node)),
-            ParsecVote::BackOnline(node) => Some(self.make_node_back_online(*node)),
+            ParsecVote::Offline(node) => {
+                self.make_node_offline(*node);
+                TryResult::Handled
+            }
+            ParsecVote::BackOnline(node) => {
+                self.make_node_back_online(*node);
+                TryResult::Handled
+            }
             // Delegate to other event loops
-            _ => None,
+            _ => TryResult::Unhandled,
         }
     }
 
-    fn try_local_event(&mut self, local_event: LocalEvent) -> Option<()> {
+    fn try_local_event(&mut self, local_event: LocalEvent) -> TryResult {
         match local_event {
-            LocalEvent::NodeDetectedOffline(node) => Some(self.vote_parsec_offline(node)),
-            LocalEvent::NodeDetectedBackOnline(node) => Some(self.vote_parsec_back_online(node)),
+            LocalEvent::NodeDetectedOffline(node) => {
+                self.vote_parsec_offline(node);
+                TryResult::Handled
+            }
+            LocalEvent::NodeDetectedBackOnline(node) => {
+                self.vote_parsec_back_online(node);
+                TryResult::Handled
+            }
             // Delegate to other event loops
-            _ => None,
+            _ => TryResult::Unhandled,
         }
     }
 

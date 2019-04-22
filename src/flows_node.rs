@@ -9,7 +9,8 @@
 use crate::{
     state::*,
     utilities::{
-        GenesisPfxInfo, LocalEvent, Name, ProofRequest, ProofSource, Rpc, SectionInfo, WaitedEvent,
+        GenesisPfxInfo, LocalEvent, Name, ProofRequest, ProofSource, Rpc, SectionInfo, TryResult,
+        WaitedEvent,
     },
 };
 use unwrap::unwrap;
@@ -25,21 +26,26 @@ impl<'a> JoiningRelocateCandidate<'a> {
         self.start_refused_timeout();
     }
 
-    pub fn try_next(&mut self, event: WaitedEvent) -> Option<()> {
-        match event {
+    pub fn try_next(&mut self, event: WaitedEvent) -> TryResult {
+        let result = match event {
             WaitedEvent::Rpc(rpc) => self.try_rpc(rpc),
             WaitedEvent::LocalEvent(local_event) => self.try_local_event(local_event),
-            _ => None,
+            _ => TryResult::Unhandled,
+        };
+
+        if result == TryResult::Unhandled {
+            self.discard();
         }
-        .or_else(|| Some(self.discard()))
+        TryResult::Handled
     }
 
-    fn try_rpc(&mut self, rpc: Rpc) -> Option<()> {
+    fn try_rpc(&mut self, rpc: Rpc) -> TryResult {
         if let Rpc::NodeApproval(candidate, info) = &rpc {
             if self.0.action.is_our_name(Name(candidate.0.name)) {
-                return Some(self.exit(*info));
+                self.exit(*info);
+                return TryResult::Handled;
             } else {
-                return None;
+                return TryResult::Unhandled;
             }
         }
 
@@ -48,7 +54,7 @@ impl<'a> JoiningRelocateCandidate<'a> {
             .map(|name| self.0.action.is_our_name(name))
             .unwrap_or(false)
         {
-            return None;
+            return TryResult::Unhandled;
         }
 
         match rpc {
@@ -56,25 +62,34 @@ impl<'a> JoiningRelocateCandidate<'a> {
                 source,
                 connection_info,
                 ..
-            } => Some(self.connect_and_send_candidate_info(source, connection_info)),
-            Rpc::ResourceProof { proof, source, .. } => {
-                Some(self.start_compute_resource_proof(source, proof))
+            } => {
+                self.connect_and_send_candidate_info(source, connection_info);
+                TryResult::Handled
             }
-            Rpc::ResourceProofReceipt { source, .. } => Some(self.send_next_proof_response(source)),
-            _ => None,
+            Rpc::ResourceProof { proof, source, .. } => {
+                self.start_compute_resource_proof(source, proof);
+                TryResult::Handled
+            }
+            Rpc::ResourceProofReceipt { source, .. } => {
+                self.send_next_proof_response(source);
+                TryResult::Handled
+            }
+            _ => TryResult::Unhandled,
         }
     }
 
-    fn try_local_event(&mut self, local_event: LocalEvent) -> Option<()> {
+    fn try_local_event(&mut self, local_event: LocalEvent) -> TryResult {
         match local_event {
             LocalEvent::ComputeResourceProofForElder(source, proof) => {
-                Some(self.send_first_proof_response(source, proof))
+                self.send_first_proof_response(source, proof);
+                TryResult::Handled
             }
-            LocalEvent::JoiningTimeoutResendCandidateInfo => Some({
+            LocalEvent::JoiningTimeoutResendCandidateInfo => {
                 self.send_connection_info_requests();
-                self.start_resend_info_timeout()
-            }),
-            _ => None,
+                self.start_resend_info_timeout();
+                TryResult::Handled
+            }
+            _ => TryResult::Unhandled,
         }
     }
 

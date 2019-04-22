@@ -12,7 +12,7 @@ use crate::{
     utilities::{
         ActionTriggered, Age, Attributes, Candidate, CandidateInfo, Event, GenesisPfxInfo,
         LocalEvent, MergeInfo, Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest,
-        ProofSource, RelocatedInfo, Rpc, Section, SectionInfo, State, TestEvent,
+        ProofSource, RelocatedInfo, Rpc, Section, SectionInfo, State, TestEvent, TryResult,
     },
 };
 use lazy_static::lazy_static;
@@ -141,10 +141,9 @@ struct AssertState {
 
 fn process_events(mut state: MemberState, events: &[Event]) -> MemberState {
     for event in events.iter().cloned() {
-        match state.try_next(event) {
-            Some(()) => (),
-            None => state.failure_event(event),
-        };
+        if TryResult::Unhandled == state.try_next(event) {
+            state.failure_event(event);
+        }
 
         if state.failure.is_some() {
             break;
@@ -1610,10 +1609,9 @@ mod node_tests {
 
     fn process_joining_events(mut state: JoiningState, events: &[Event]) -> JoiningState {
         for event in events.iter().cloned() {
-            match state.try_next(event) {
-                Some(()) => (),
-                None => state.failure_event(event),
-            };
+            if TryResult::Unhandled == state.try_next(event) {
+                state.failure_event(event);
+            }
 
             if state.failure.is_some() {
                 break;

@@ -8,7 +8,7 @@
 
 use crate::{
     state::{MemberState, StartRelocateSrcState},
-    utilities::{Candidate, LocalEvent, ParsecVote, RelocatedInfo, Rpc, WaitedEvent},
+    utilities::{Candidate, LocalEvent, ParsecVote, RelocatedInfo, Rpc, TryResult, WaitedEvent},
 };
 use unwrap::unwrap;
 
@@ -22,34 +22,36 @@ impl<'a> TopLevelSrc<'a> {
         self.start_work_unit_timeout()
     }
 
-    pub fn try_next(&mut self, event: WaitedEvent) -> Option<()> {
+    pub fn try_next(&mut self, event: WaitedEvent) -> TryResult {
         match event {
             WaitedEvent::LocalEvent(local_event) => self.try_local_event(local_event),
             WaitedEvent::ParsecConsensus(vote) => self.try_consensus(vote),
 
-            WaitedEvent::Rpc(_) => None,
+            WaitedEvent::Rpc(_) => TryResult::Unhandled,
         }
     }
 
-    fn try_local_event(&mut self, local_event: LocalEvent) -> Option<()> {
+    fn try_local_event(&mut self, local_event: LocalEvent) -> TryResult {
         match local_event {
-            LocalEvent::TimeoutWorkUnit => Some({
+            LocalEvent::TimeoutWorkUnit => {
                 self.vote_parsec_work_unit_increment();
-                self.start_work_unit_timeout()
-            }),
-            _ => None,
+                self.start_work_unit_timeout();
+                TryResult::Handled
+            }
+            _ => TryResult::Unhandled,
         }
     }
 
-    fn try_consensus(&mut self, vote: ParsecVote) -> Option<()> {
+    fn try_consensus(&mut self, vote: ParsecVote) -> TryResult {
         match vote {
-            ParsecVote::WorkUnitIncrement => Some({
+            ParsecVote::WorkUnitIncrement => {
                 self.increment_nodes_work_units();
-                self.check_get_node_to_relocate()
-            }),
+                self.check_get_node_to_relocate();
+                TryResult::Handled
+            }
 
             // Delegate to other event loops
-            _ => None,
+            _ => TryResult::Unhandled,
         }
     }
 
@@ -94,7 +96,7 @@ impl<'a> StartRelocateSrc<'a> {
         self.start_check_relocate_timeout()
     }
 
-    pub fn try_next(&mut self, event: WaitedEvent) -> Option<()> {
+    pub fn try_next(&mut self, event: WaitedEvent) -> TryResult {
         match event {
             WaitedEvent::LocalEvent(local_event) => self.try_local_event(local_event),
             WaitedEvent::Rpc(rpc) => self.try_rpc(rpc),
@@ -102,40 +104,50 @@ impl<'a> StartRelocateSrc<'a> {
         }
     }
 
-    fn try_local_event(&mut self, local_event: LocalEvent) -> Option<()> {
+    fn try_local_event(&mut self, local_event: LocalEvent) -> TryResult {
         match local_event {
-            LocalEvent::TimeoutCheckRelocate => Some({
+            LocalEvent::TimeoutCheckRelocate => {
                 self.vote_parsec_check_relocate();
-                self.start_check_relocate_timeout()
-            }),
-            _ => None,
+                self.start_check_relocate_timeout();
+                TryResult::Handled
+            }
+            _ => TryResult::Unhandled,
         }
     }
 
-    fn try_rpc(&mut self, rpc: Rpc) -> Option<()> {
+    fn try_rpc(&mut self, rpc: Rpc) -> TryResult {
         match rpc {
-            Rpc::RefuseCandidate(candidate) => Some(self.vote_parsec_refuse_candidate(candidate)),
-            Rpc::RelocateResponse(info) => Some(self.vote_parsec_relocation_response(info)),
-            _ => None,
+            Rpc::RefuseCandidate(candidate) => {
+                self.vote_parsec_refuse_candidate(candidate);
+                TryResult::Handled
+            }
+            Rpc::RelocateResponse(info) => {
+                self.vote_parsec_relocation_response(info);
+                TryResult::Handled
+            }
+            _ => TryResult::Unhandled,
         }
     }
 
-    fn try_consensus(&mut self, vote: ParsecVote) -> Option<()> {
+    fn try_consensus(&mut self, vote: ParsecVote) -> TryResult {
         match vote {
-            ParsecVote::CheckRelocate => Some({
+            ParsecVote::CheckRelocate => {
                 self.check_need_relocate();
-                self.update_wait_and_allow_resend()
-            }),
+                self.update_wait_and_allow_resend();
+                TryResult::Handled
+            }
             ParsecVote::RefuseCandidate(candidate)
             | ParsecVote::RelocateResponse(RelocatedInfo { candidate, .. }) => {
-                Some(self.check_is_our_relocating_node(vote, candidate))
+                self.check_is_our_relocating_node(vote, candidate);
+                TryResult::Handled
             }
-            ParsecVote::RelocatedInfo(info) => Some({
+            ParsecVote::RelocatedInfo(info) => {
                 self.send_candidate_relocated_info_rpc(info);
-                self.purge_node_info(info)
-            }),
+                self.purge_node_info(info);
+                TryResult::Handled
+            }
             // Delegate to other event loops
-            _ => None,
+            _ => TryResult::Unhandled,
         }
     }
 

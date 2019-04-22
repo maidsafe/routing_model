@@ -57,16 +57,16 @@ pub struct MemberState {
 }
 
 impl MemberState {
-    pub fn try_next(&mut self, event: Event) -> Option<()> {
+    pub fn try_next(&mut self, event: Event) -> TryResult {
         if let Some(test_event) = event.to_test_event() {
             self.action.process_test_events(test_event);
-            return Some(());
+            return TryResult::Handled;
         }
 
         let event = unwrap!(event.to_waited_event());
 
-        if let Some(next) = self.as_check_and_process_elder_change().try_next(event) {
-            return Some(next);
+        if let TryResult::Handled = self.as_check_and_process_elder_change().try_next(event) {
+            return TryResult::Handled;
         }
 
         if self
@@ -74,40 +74,40 @@ impl MemberState {
             .sub_routine_process_elder_change
             .is_active
         {
-            if let Some(next) = self.as_process_elder_change().try_next(event) {
-                return Some(next);
+            if let TryResult::Handled = self.as_process_elder_change().try_next(event) {
+                return TryResult::Handled;
             }
         }
 
-        if let Some(next) = self.as_check_online_offline().try_next(event) {
-            return Some(next);
+        if let TryResult::Handled = self.as_check_online_offline().try_next(event) {
+            return TryResult::Handled;
         }
 
-        if let Some(next) = self.as_start_relocate_src().try_next(event) {
-            return Some(next);
+        if let TryResult::Handled = self.as_start_relocate_src().try_next(event) {
+            return TryResult::Handled;
         }
 
-        if let Some(next) = self.as_top_level_src().try_next(event) {
-            return Some(next);
+        if let TryResult::Handled = self.as_top_level_src().try_next(event) {
+            return TryResult::Handled;
         }
 
-        if let Some(next) = self.as_start_relocated_node_connection().try_next(event) {
-            return Some(next);
+        if let TryResult::Handled = self.as_start_relocated_node_connection().try_next(event) {
+            return TryResult::Handled;
         }
 
-        if let Some(next) = self.as_start_resource_proof().try_next(event) {
-            return Some(next);
+        if let TryResult::Handled = self.as_start_resource_proof().try_next(event) {
+            return TryResult::Handled;
         }
 
-        if let Some(next) = self.as_respond_to_relocate_requests().try_next(event) {
-            return Some(next);
+        if let TryResult::Handled = self.as_respond_to_relocate_requests().try_next(event) {
+            return TryResult::Handled;
         }
 
         match event {
             WaitedEvent::Rpc(Rpc::ConnectionInfoResponse { .. }) => {
                 self.action
                     .action_triggered(ActionTriggered::NotYetImplementedErrorTriggered);
-                Some(())
+                TryResult::Handled
             }
             // These should only happen if a routine started them, so it should have
             // handled them too, but other routine are not there yet and we want to test
@@ -117,10 +117,10 @@ impl MemberState {
             | WaitedEvent::ParsecConsensus(ParsecVote::NewSectionInfo(_)) => {
                 self.action
                     .action_triggered(ActionTriggered::UnexpectedEventErrorTriggered);
-                Some(())
+                TryResult::Handled
             }
 
-            _ => None,
+            _ => TryResult::Unhandled,
         }
     }
 
@@ -181,19 +181,19 @@ impl JoiningState {
             .start_event_loop(new_section)
     }
 
-    pub fn try_next(&mut self, event: Event) -> Option<()> {
+    pub fn try_next(&mut self, event: Event) -> TryResult {
         if let Some(test_event) = event.to_test_event() {
             self.action.process_test_events(test_event);
-            return Some(());
+            return TryResult::Handled;
         }
 
         let event = unwrap!(event.to_waited_event());
 
-        if let Some(next) = self.as_joining_relocate_candidate().try_next(event) {
-            return Some(next);
+        if let TryResult::Handled = self.as_joining_relocate_candidate().try_next(event) {
+            return TryResult::Handled;
         }
 
-        None
+        TryResult::Unhandled
     }
 
     pub fn as_joining_relocate_candidate(&mut self) -> JoiningRelocateCandidate {
