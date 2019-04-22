@@ -18,14 +18,14 @@ use unwrap::unwrap;
 pub struct JoiningRelocateCandidate(pub JoiningState);
 
 impl JoiningRelocateCandidate {
-    pub fn start_event_loop(&self, new_section: SectionInfo) -> Self {
+    pub fn start_event_loop(&mut self, new_section: SectionInfo) -> Self {
         self.store_destination_members(new_section)
             .send_connection_info_requests()
             .start_resend_info_timeout()
             .start_refused_timeout()
     }
 
-    pub fn try_next(&self, event: WaitedEvent) -> Option<JoiningState> {
+    pub fn try_next(&mut self, event: WaitedEvent) -> Option<JoiningState> {
         match event {
             WaitedEvent::Rpc(rpc) => self.try_rpc(rpc),
             WaitedEvent::LocalEvent(local_event) => self.try_local_event(local_event),
@@ -35,7 +35,7 @@ impl JoiningRelocateCandidate {
         .map(|state| state.0)
     }
 
-    fn try_rpc(&self, rpc: Rpc) -> Option<Self> {
+    fn try_rpc(&mut self, rpc: Rpc) -> Option<Self> {
         if let Rpc::NodeApproval(candidate, info) = &rpc {
             if self.0.action.is_our_name(Name(candidate.0.name)) {
                 return Some(self.exit(*info));
@@ -66,7 +66,7 @@ impl JoiningRelocateCandidate {
         }
     }
 
-    fn try_local_event(&self, local_event: LocalEvent) -> Option<Self> {
+    fn try_local_event(&mut self, local_event: LocalEvent) -> Option<Self> {
         match local_event {
             LocalEvent::ComputeResourceProofForElder(source, proof) => {
                 Some(self.send_first_proof_response(source, proof))
@@ -79,18 +79,18 @@ impl JoiningRelocateCandidate {
         }
     }
 
-    fn exit(&self, info: GenesisPfxInfo) -> Self {
+    fn exit(&mut self, info: GenesisPfxInfo) -> Self {
         let mut state = self.clone();
         state.0.join_routine.has_resource_proofs.clear();
         state.0.join_routine.routine_complete = Some(info);
         state
     }
 
-    fn discard(&self) -> Self {
+    fn discard(&mut self) -> Self {
         self.clone()
     }
 
-    fn store_destination_members(&self, section: SectionInfo) -> Self {
+    fn store_destination_members(&mut self, section: SectionInfo) -> Self {
         let mut state = self.clone();
 
         let members = state.0.action.get_section_members(section);
@@ -101,7 +101,7 @@ impl JoiningRelocateCandidate {
         state
     }
 
-    fn send_connection_info_requests(&self) -> Self {
+    fn send_connection_info_requests(&mut self) -> Self {
         let has_resource_proofs = &self.0.join_routine.has_resource_proofs;
         for (name, _) in has_resource_proofs.iter().filter(|(_, value)| !value.0) {
             self.0.action.send_connection_info_request(*name);
@@ -110,7 +110,7 @@ impl JoiningRelocateCandidate {
         self.clone()
     }
 
-    fn send_first_proof_response(&self, source: Name, mut proof_source: ProofSource) -> Self {
+    fn send_first_proof_response(&mut self, source: Name, mut proof_source: ProofSource) -> Self {
         let mut state = self.clone();
         let proof = state
             .0
@@ -129,7 +129,7 @@ impl JoiningRelocateCandidate {
         state
     }
 
-    fn send_next_proof_response(&self, source: Name) -> Self {
+    fn send_next_proof_response(&mut self, source: Name) -> Self {
         let mut state = self.clone();
         let proof_source = &mut unwrap!(state
             .0
@@ -148,26 +148,26 @@ impl JoiningRelocateCandidate {
         state
     }
 
-    fn connect_and_send_candidate_info(&self, source: Name, _connect_info: i32) -> Self {
+    fn connect_and_send_candidate_info(&mut self, source: Name, _connect_info: i32) -> Self {
         self.0.action.send_candidate_info(source);
         self.clone()
     }
 
-    fn start_resend_info_timeout(&self) -> Self {
+    fn start_resend_info_timeout(&mut self) -> Self {
         self.0
             .action
             .schedule_event(LocalEvent::JoiningTimeoutResendCandidateInfo);
         self.clone()
     }
 
-    fn start_refused_timeout(&self) -> Self {
+    fn start_refused_timeout(&mut self) -> Self {
         self.0
             .action
             .schedule_event(LocalEvent::JoiningTimeoutRefused);
         self.clone()
     }
 
-    fn start_compute_resource_proof(&self, source: Name, proof: ProofRequest) -> Self {
+    fn start_compute_resource_proof(&mut self, source: Name, proof: ProofRequest) -> Self {
         let mut state = self.clone();
         state.0.action.start_compute_resource_proof(source, proof);
         let proof = state

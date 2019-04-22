@@ -57,7 +57,7 @@ pub struct MemberState {
 }
 
 impl MemberState {
-    pub fn try_next(&self, event: Event) -> Option<Self> {
+    pub fn try_next(&mut self, event: Event) -> Option<Self> {
         if let Some(test_event) = event.to_test_event() {
             self.action.process_test_events(test_event);
             return Some(self.clone());
@@ -124,39 +124,39 @@ impl MemberState {
         }
     }
 
-    pub fn as_respond_to_relocate_requests(&self) -> RespondToRelocateRequests {
+    pub fn as_respond_to_relocate_requests(&mut self) -> RespondToRelocateRequests {
         RespondToRelocateRequests(self.clone())
     }
 
-    pub fn as_start_relocated_node_connection(&self) -> StartRelocatedNodeConnection {
+    pub fn as_start_relocated_node_connection(&mut self) -> StartRelocatedNodeConnection {
         StartRelocatedNodeConnection(self.clone())
     }
 
-    pub fn as_start_resource_proof(&self) -> StartResourceProof {
+    pub fn as_start_resource_proof(&mut self) -> StartResourceProof {
         StartResourceProof(self.clone())
     }
 
-    pub fn as_check_and_process_elder_change(&self) -> CheckAndProcessElderChange {
+    pub fn as_check_and_process_elder_change(&mut self) -> CheckAndProcessElderChange {
         CheckAndProcessElderChange(self.clone())
     }
 
-    pub fn as_check_online_offline(&self) -> CheckOnlineOffline {
+    pub fn as_check_online_offline(&mut self) -> CheckOnlineOffline {
         CheckOnlineOffline(self.clone())
     }
 
-    pub fn as_top_level_src(&self) -> TopLevelSrc {
+    pub fn as_top_level_src(&mut self) -> TopLevelSrc {
         TopLevelSrc(self.clone())
     }
 
-    pub fn as_start_relocate_src(&self) -> StartRelocateSrc {
+    pub fn as_start_relocate_src(&mut self) -> StartRelocateSrc {
         StartRelocateSrc(self.clone())
     }
 
-    pub fn as_process_elder_change(&self) -> ProcessElderChange {
+    pub fn as_process_elder_change(&mut self) -> ProcessElderChange {
         ProcessElderChange(self.clone())
     }
 
-    pub fn failure_event(&self, event: Event) -> Self {
+    pub fn failure_event(&mut self, event: Event) -> Self {
         Self {
             failure: Some(event),
             ..self.clone()
@@ -179,13 +179,13 @@ pub struct JoiningState {
 }
 
 impl JoiningState {
-    pub fn start(&self, new_section: SectionInfo) -> Self {
+    pub fn start(&mut self, new_section: SectionInfo) -> Self {
         self.as_joining_relocate_candidate()
             .start_event_loop(new_section)
             .0
     }
 
-    pub fn try_next(&self, event: Event) -> Option<Self> {
+    pub fn try_next(&mut self, event: Event) -> Option<Self> {
         if let Some(test_event) = event.to_test_event() {
             self.action.process_test_events(test_event);
             return Some(self.clone());
@@ -200,11 +200,11 @@ impl JoiningState {
         None
     }
 
-    pub fn as_joining_relocate_candidate(&self) -> JoiningRelocateCandidate {
+    pub fn as_joining_relocate_candidate(&mut self) -> JoiningRelocateCandidate {
         JoiningRelocateCandidate(self.clone())
     }
 
-    pub fn failure_event(&self, event: Event) -> Self {
+    pub fn failure_event(&mut self, event: Event) -> Self {
         Self {
             failure: Some(event),
             ..self.clone()
