@@ -401,14 +401,15 @@ impl StartResourceProof {
 
     fn check_request_resource_proof(&self) -> Self {
         if self.has_candidate() {
-            self.send_resource_proof_rpc()
+            self.send_resource_proof_rpc_and_schedule_proof_timeout()
         } else {
             self.finish_resource_proof()
         }
     }
 
-    fn send_resource_proof_rpc(&self) -> Self {
+    fn send_resource_proof_rpc_and_schedule_proof_timeout(&self) -> Self {
         self.0.action.send_candidate_proof_request(self.candidate());
+        self.0.action.schedule_event(LocalEvent::TimeoutAccept);
         self.clone()
     }
 
