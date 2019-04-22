@@ -141,8 +141,8 @@ struct AssertState {
 
 fn process_events(mut state: MemberState, events: &[Event]) -> MemberState {
     for event in events.iter().cloned() {
-        state = match state.try_next(event) {
-            Some(next_state) => next_state,
+        match state.try_next(event) {
+            Some(()) => (),
             None => state.failure_event(event),
         };
 
@@ -1610,8 +1610,8 @@ mod node_tests {
 
     fn process_joining_events(mut state: JoiningState, events: &[Event]) -> JoiningState {
         for event in events.iter().cloned() {
-            state = match state.try_next(event) {
-                Some(next_state) => next_state,
+            match state.try_next(event) {
+                Some(()) => (),
                 None => state.failure_event(event),
             };
 
@@ -1642,9 +1642,12 @@ mod node_tests {
 
     #[test]
     fn joining_start() {
+        let mut initial_state = initial_joining_state_with_dst_200();
+        initial_state.start(DST_SECTION_INFO_200);
+
         run_joining_test(
             "",
-            &initial_joining_state_with_dst_200().start(DST_SECTION_INFO_200),
+            &initial_state,
             &[],
             &AssertJoiningState {
                 action_our_events: vec![
@@ -1683,10 +1686,10 @@ mod node_tests {
 
     #[test]
     fn joining_receive_two_connection_info() {
-        let initial_state = arrange_initial_joining_state(
-            &initial_joining_state_with_dst_200().start(DST_SECTION_INFO_200),
-            &[],
-        );
+        let mut initial_state = initial_joining_state_with_dst_200();
+        initial_state.start(DST_SECTION_INFO_200);
+
+        let initial_state = arrange_initial_joining_state(&initial_state, &[]);
 
         run_joining_test(
             "",
@@ -1736,8 +1739,11 @@ mod node_tests {
 
     #[test]
     fn joining_receive_one_resource_proof() {
+        let mut initial_state = initial_joining_state_with_dst_200();
+        initial_state.start(DST_SECTION_INFO_200);
+
         let initial_state = arrange_initial_joining_state(
-            &initial_joining_state_with_dst_200().start(DST_SECTION_INFO_200),
+            &initial_state,
             &[
                 Rpc::ConnectionInfoResponse {
                     source: NAME_110,
@@ -1783,8 +1789,11 @@ mod node_tests {
 
     #[test]
     fn joining_computed_one_proof_one_proof() {
+        let mut initial_state = initial_joining_state_with_dst_200();
+        initial_state.start(DST_SECTION_INFO_200);
+
         let initial_state = arrange_initial_joining_state(
-            &initial_joining_state_with_dst_200().start(DST_SECTION_INFO_200),
+            &initial_state,
             &[
                 Rpc::ConnectionInfoResponse {
                     source: NAME_111,
@@ -1826,8 +1835,11 @@ mod node_tests {
 
     #[test]
     fn joining_got_one_proof_receipt() {
+        let mut initial_state = initial_joining_state_with_dst_200();
+        initial_state.start(DST_SECTION_INFO_200);
+
         let initial_state = arrange_initial_joining_state(
-            &initial_joining_state_with_dst_200().start(DST_SECTION_INFO_200),
+            &initial_state,
             &[
                 Rpc::ConnectionInfoResponse {
                     source: NAME_111,
@@ -1874,8 +1886,11 @@ mod node_tests {
 
     #[test]
     fn joining_resend_timeout_after_one_proof() {
+        let mut initial_state = initial_joining_state_with_dst_200();
+        initial_state.start(DST_SECTION_INFO_200);
+
         let initial_state = arrange_initial_joining_state(
-            &initial_joining_state_with_dst_200().start(DST_SECTION_INFO_200),
+            &initial_state,
             &[
                 Rpc::ConnectionInfoResponse {
                     source: NAME_110,
@@ -1932,10 +1947,10 @@ mod node_tests {
 
     #[test]
     fn joining_approved() {
-        let initial_state = arrange_initial_joining_state(
-            &initial_joining_state_with_dst_200().start(DST_SECTION_INFO_200),
-            &[],
-        );
+        let mut initial_state = initial_joining_state_with_dst_200();
+        initial_state.start(DST_SECTION_INFO_200);
+
+        let initial_state = arrange_initial_joining_state(&initial_state, &[]);
 
         run_joining_test(
             "On NodeApproval: complete the routine work.",

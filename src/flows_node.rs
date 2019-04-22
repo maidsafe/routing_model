@@ -14,28 +14,27 @@ use crate::{
 };
 use unwrap::unwrap;
 
-#[derive(Debug, PartialEq, Default, Clone)]
-pub struct JoiningRelocateCandidate(pub JoiningState);
+#[derive(Debug, PartialEq)]
+pub struct JoiningRelocateCandidate<'a>(pub &'a mut JoiningState);
 
-impl JoiningRelocateCandidate {
-    pub fn start_event_loop(&mut self, new_section: SectionInfo) -> Self {
-        self.store_destination_members(new_section)
-            .send_connection_info_requests()
-            .start_resend_info_timeout()
-            .start_refused_timeout()
+impl<'a> JoiningRelocateCandidate<'a> {
+    pub fn start_event_loop(&mut self, new_section: SectionInfo) {
+        self.store_destination_members(new_section);
+        self.send_connection_info_requests();
+        self.start_resend_info_timeout();
+        self.start_refused_timeout();
     }
 
-    pub fn try_next(&mut self, event: WaitedEvent) -> Option<JoiningState> {
+    pub fn try_next(&mut self, event: WaitedEvent) -> Option<()> {
         match event {
             WaitedEvent::Rpc(rpc) => self.try_rpc(rpc),
             WaitedEvent::LocalEvent(local_event) => self.try_local_event(local_event),
             _ => None,
         }
         .or_else(|| Some(self.discard()))
-        .map(|state| state.0)
     }
 
-    fn try_rpc(&mut self, rpc: Rpc) -> Option<Self> {
+    fn try_rpc(&mut self, rpc: Rpc) -> Option<()> {
         if let Rpc::NodeApproval(candidate, info) = &rpc {
             if self.0.action.is_our_name(Name(candidate.0.name)) {
                 return Some(self.exit(*info));
@@ -66,53 +65,43 @@ impl JoiningRelocateCandidate {
         }
     }
 
-    fn try_local_event(&mut self, local_event: LocalEvent) -> Option<Self> {
+    fn try_local_event(&mut self, local_event: LocalEvent) -> Option<()> {
         match local_event {
             LocalEvent::ComputeResourceProofForElder(source, proof) => {
                 Some(self.send_first_proof_response(source, proof))
             }
-            LocalEvent::JoiningTimeoutResendCandidateInfo => Some(
-                self.send_connection_info_requests()
-                    .start_resend_info_timeout(),
-            ),
+            LocalEvent::JoiningTimeoutResendCandidateInfo => Some({
+                self.send_connection_info_requests();
+                self.start_resend_info_timeout()
+            }),
             _ => None,
         }
     }
 
-    fn exit(&mut self, info: GenesisPfxInfo) -> Self {
-        let mut state = self.clone();
-        state.0.join_routine.has_resource_proofs.clear();
-        state.0.join_routine.routine_complete = Some(info);
-        state
+    fn exit(&mut self, info: GenesisPfxInfo) {
+        self.0.join_routine.has_resource_proofs.clear();
+        self.0.join_routine.routine_complete = Some(info);
     }
 
-    fn discard(&mut self) -> Self {
-        self.clone()
-    }
+    fn discard(&mut self) {}
 
-    fn store_destination_members(&mut self, section: SectionInfo) -> Self {
-        let mut state = self.clone();
-
-        let members = state.0.action.get_section_members(section);
-        state.0.join_routine.has_resource_proofs = members
+    fn store_destination_members(&mut self, section: SectionInfo) {
+        let members = self.0.action.get_section_members(section);
+        self.0.join_routine.has_resource_proofs = members
             .iter()
             .map(|node| (Name(node.0.name), (false, None)))
             .collect();
-        state
     }
 
-    fn send_connection_info_requests(&mut self) -> Self {
+    fn send_connection_info_requests(&mut self) {
         let has_resource_proofs = &self.0.join_routine.has_resource_proofs;
         for (name, _) in has_resource_proofs.iter().filter(|(_, value)| !value.0) {
             self.0.action.send_connection_info_request(*name);
         }
-
-        self.clone()
     }
 
-    fn send_first_proof_response(&mut self, source: Name, mut proof_source: ProofSource) -> Self {
-        let mut state = self.clone();
-        let proof = state
+    fn send_first_proof_response(&mut self, source: Name, mut proof_source: ProofSource) {
+        let proof = self
             .0
             .join_routine
             .has_resource_proofs
@@ -122,16 +111,13 @@ impl JoiningRelocateCandidate {
         let next_part = proof_source.next_part();
         proof.1 = Some(proof_source);
 
-        state
-            .0
+        self.0
             .action
             .send_resource_proof_response(source, next_part);
-        state
     }
 
-    fn send_next_proof_response(&mut self, source: Name) -> Self {
-        let mut state = self.clone();
-        let proof_source = &mut unwrap!(state
+    fn send_next_proof_response(&mut self, source: Name) {
+        let proof_source = &mut unwrap!(self
             .0
             .join_routine
             .has_resource_proofs
@@ -141,36 +127,30 @@ impl JoiningRelocateCandidate {
             .as_mut());
 
         let next_part = proof_source.next_part();
-        state
-            .0
+        self.0
             .action
             .send_resource_proof_response(source, next_part);
-        state
     }
 
-    fn connect_and_send_candidate_info(&mut self, source: Name, _connect_info: i32) -> Self {
+    fn connect_and_send_candidate_info(&mut self, source: Name, _connect_info: i32) {
         self.0.action.send_candidate_info(source);
-        self.clone()
     }
 
-    fn start_resend_info_timeout(&mut self) -> Self {
+    fn start_resend_info_timeout(&mut self) {
         self.0
             .action
             .schedule_event(LocalEvent::JoiningTimeoutResendCandidateInfo);
-        self.clone()
     }
 
-    fn start_refused_timeout(&mut self) -> Self {
+    fn start_refused_timeout(&mut self) {
         self.0
             .action
             .schedule_event(LocalEvent::JoiningTimeoutRefused);
-        self.clone()
     }
 
-    fn start_compute_resource_proof(&mut self, source: Name, proof: ProofRequest) -> Self {
-        let mut state = self.clone();
-        state.0.action.start_compute_resource_proof(source, proof);
-        let proof = state
+    fn start_compute_resource_proof(&mut self, source: Name, proof: ProofRequest) {
+        self.0.action.start_compute_resource_proof(source, proof);
+        let proof = self
             .0
             .join_routine
             .has_resource_proofs
@@ -179,6 +159,5 @@ impl JoiningRelocateCandidate {
         if !proof.0 {
             *proof = (true, None);
         }
-        state
     }
 }

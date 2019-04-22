@@ -57,10 +57,10 @@ pub struct MemberState {
 }
 
 impl MemberState {
-    pub fn try_next(&mut self, event: Event) -> Option<Self> {
+    pub fn try_next(&mut self, event: Event) -> Option<()> {
         if let Some(test_event) = event.to_test_event() {
             self.action.process_test_events(test_event);
-            return Some(self.clone());
+            return Some(());
         }
 
         let event = unwrap!(event.to_waited_event());
@@ -107,7 +107,7 @@ impl MemberState {
             WaitedEvent::Rpc(Rpc::ConnectionInfoResponse { .. }) => {
                 self.action
                     .action_triggered(ActionTriggered::NotYetImplementedErrorTriggered);
-                Some(self.clone())
+                Some(())
             }
             // These should only happen if a routine started them, so it should have
             // handled them too, but other routine are not there yet and we want to test
@@ -117,7 +117,7 @@ impl MemberState {
             | WaitedEvent::ParsecConsensus(ParsecVote::NewSectionInfo(_)) => {
                 self.action
                     .action_triggered(ActionTriggered::UnexpectedEventErrorTriggered);
-                Some(self.clone())
+                Some(())
             }
 
             _ => None,
@@ -125,42 +125,39 @@ impl MemberState {
     }
 
     pub fn as_respond_to_relocate_requests(&mut self) -> RespondToRelocateRequests {
-        RespondToRelocateRequests(self.clone())
+        RespondToRelocateRequests(self)
     }
 
     pub fn as_start_relocated_node_connection(&mut self) -> StartRelocatedNodeConnection {
-        StartRelocatedNodeConnection(self.clone())
+        StartRelocatedNodeConnection(self)
     }
 
     pub fn as_start_resource_proof(&mut self) -> StartResourceProof {
-        StartResourceProof(self.clone())
+        StartResourceProof(self)
     }
 
     pub fn as_check_and_process_elder_change(&mut self) -> CheckAndProcessElderChange {
-        CheckAndProcessElderChange(self.clone())
+        CheckAndProcessElderChange(self)
     }
 
     pub fn as_check_online_offline(&mut self) -> CheckOnlineOffline {
-        CheckOnlineOffline(self.clone())
+        CheckOnlineOffline(self)
     }
 
     pub fn as_top_level_src(&mut self) -> TopLevelSrc {
-        TopLevelSrc(self.clone())
+        TopLevelSrc(self)
     }
 
     pub fn as_start_relocate_src(&mut self) -> StartRelocateSrc {
-        StartRelocateSrc(self.clone())
+        StartRelocateSrc(self)
     }
 
     pub fn as_process_elder_change(&mut self) -> ProcessElderChange {
-        ProcessElderChange(self.clone())
+        ProcessElderChange(self)
     }
 
-    pub fn failure_event(&mut self, event: Event) -> Self {
-        Self {
-            failure: Some(event),
-            ..self.clone()
-        }
+    pub fn failure_event(&mut self, event: Event) {
+        self.failure = Some(event);
     }
 }
 
@@ -179,16 +176,15 @@ pub struct JoiningState {
 }
 
 impl JoiningState {
-    pub fn start(&mut self, new_section: SectionInfo) -> Self {
+    pub fn start(&mut self, new_section: SectionInfo) {
         self.as_joining_relocate_candidate()
             .start_event_loop(new_section)
-            .0
     }
 
-    pub fn try_next(&mut self, event: Event) -> Option<Self> {
+    pub fn try_next(&mut self, event: Event) -> Option<()> {
         if let Some(test_event) = event.to_test_event() {
             self.action.process_test_events(test_event);
-            return Some(self.clone());
+            return Some(());
         }
 
         let event = unwrap!(event.to_waited_event());
@@ -201,13 +197,10 @@ impl JoiningState {
     }
 
     pub fn as_joining_relocate_candidate(&mut self) -> JoiningRelocateCandidate {
-        JoiningRelocateCandidate(self.clone())
+        JoiningRelocateCandidate(self)
     }
 
-    pub fn failure_event(&mut self, event: Event) -> Self {
-        Self {
-            failure: Some(event),
-            ..self.clone()
-        }
+    pub fn failure_event(&mut self, event: Event) {
+        self.failure = Some(event);
     }
 }
