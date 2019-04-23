@@ -211,6 +211,8 @@ pub struct CandidateInfo {
     pub valid: bool,
 }
 
+// Event passed to get out of "Wait for" state in flow diagram:
+// Pass to try_next to the implementations.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WaitedEvent {
     Rpc(Rpc),
@@ -218,6 +220,7 @@ pub enum WaitedEvent {
     LocalEvent(LocalEvent),
 }
 
+// Event allowing to drive the tests and collect output, a superset of WaitedEvent.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Event {
     Rpc(Rpc),
