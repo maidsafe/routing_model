@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::{actions::*, flows_dst::*, flows_node::*, flows_src::*, utilities::*};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct ProcessElderChangeState {
@@ -21,21 +21,11 @@ pub struct CheckAndProcessElderChangeState {
     pub sub_routine_process_elder_change: ProcessElderChangeState,
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct AcceptAsCandidateState {
-    pub candidate: Candidate,
+#[derive(Debug, PartialEq, Default, Clone)]
+pub struct StartResourceProofState {
+    pub candidate: Option<Candidate>,
     pub got_candidate_info: bool,
     pub voted_online: bool,
-}
-
-impl AcceptAsCandidateState {
-    pub fn new(candidate: Candidate) -> Self {
-        Self {
-            candidate,
-            got_candidate_info: false,
-            voted_online: false,
-        }
-    }
 }
 
 #[derive(Debug, PartialEq, Default, Clone)]
@@ -44,9 +34,10 @@ pub struct StartRelocateSrcState {
 }
 
 #[derive(Debug, PartialEq, Default, Clone)]
-pub struct DstRoutineState {
-    pub is_processing_candidate: bool,
-    pub sub_routine_accept_as_candidate: Option<AcceptAsCandidateState>,
+pub struct StartRelocatedNodeConnectionState {
+    pub candidates: BTreeSet<Name>,
+    pub candidates_info: BTreeMap<Name, CandidateInfo>,
+    pub candidates_voted: BTreeSet<Name>,
 }
 
 #[derive(Debug, PartialEq, Default, Clone)]
@@ -57,7 +48,8 @@ pub struct SrcRoutineState {}
 pub struct MemberState {
     pub action: Action,
     pub failure: Option<Event>,
-    pub dst_routine: DstRoutineState,
+    pub start_resource_proof: StartResourceProofState,
+    pub start_relocated_node_connection_state: StartRelocatedNodeConnectionState,
     pub src_routine: SrcRoutineState,
     pub start_relocate_src: StartRelocateSrcState,
     pub check_and_process_elder_change_routine: CheckAndProcessElderChangeState,
@@ -65,8 +57,6 @@ pub struct MemberState {
 
 impl MemberState {
     pub fn try_next(&self, event: Event) -> Option<Self> {
-        let dst = &self.dst_routine;
-
         if let Some(next) = self.as_check_and_process_elder_change().try_next(event) {
             return Some(next);
         }
@@ -93,34 +83,49 @@ impl MemberState {
             return Some(next);
         }
 
-        if dst.sub_routine_accept_as_candidate.is_some() {
-            if let Some(next) = self.as_accept_as_candidate().try_next(event) {
-                return Some(next);
-            }
+        if let Some(next) = self.as_start_relocated_node_connection().try_next(event) {
+            return Some(next);
         }
 
-        if let Some(next) = self.as_top_level_dst().try_next(event) {
+        if let Some(next) = self.as_start_resource_proof().try_next(event) {
+            return Some(next);
+        }
+
+        if let Some(next) = self.as_respond_to_relocate_requests().try_next(event) {
             return Some(next);
         }
 
         match event {
+            Event::Rpc(Rpc::ConnectionInfoResponse { .. }) => {
+                self.action
+                    .schedule_event(LocalEvent::NotYetImplementedEvent);
+                Some(self.clone())
+            }
             // These should only happen if a routine started them, so it should have
             // handled them too, but other routine are not there yet and we want to test
             // these do not fail.
             Event::ParsecConsensus(ParsecVote::RemoveElderNode(_))
             | Event::ParsecConsensus(ParsecVote::AddElderNode(_))
-            | Event::ParsecConsensus(ParsecVote::NewSectionInfo(_)) => Some(self.clone()),
+            | Event::ParsecConsensus(ParsecVote::NewSectionInfo(_)) => {
+                self.action
+                    .schedule_event(LocalEvent::UnexpectedEventIgnored);
+                Some(self.clone())
+            }
 
             _ => None,
         }
     }
 
-    pub fn as_top_level_dst(&self) -> TopLevelDst {
-        TopLevelDst(self.clone())
+    pub fn as_respond_to_relocate_requests(&self) -> RespondToRelocateRequests {
+        RespondToRelocateRequests(self.clone())
     }
 
-    pub fn as_accept_as_candidate(&self) -> AcceptAsCandidate {
-        AcceptAsCandidate(self.clone())
+    pub fn as_start_relocated_node_connection(&self) -> StartRelocatedNodeConnection {
+        StartRelocatedNodeConnection(self.clone())
+    }
+
+    pub fn as_start_resource_proof(&self) -> StartResourceProof {
+        StartResourceProof(self.clone())
     }
 
     pub fn as_check_and_process_elder_change(&self) -> CheckAndProcessElderChange {
@@ -146,19 +151,6 @@ impl MemberState {
     pub fn failure_event(&self, event: Event) -> Self {
         Self {
             failure: Some(event),
-            ..self.clone()
-        }
-    }
-
-    pub fn with_dst_sub_routine_accept_as_candidate(
-        &self,
-        sub_routine_accept_as_candidate: Option<AcceptAsCandidateState>,
-    ) -> Self {
-        Self {
-            dst_routine: DstRoutineState {
-                sub_routine_accept_as_candidate,
-                ..self.dst_routine.clone()
-            },
             ..self.clone()
         }
     }

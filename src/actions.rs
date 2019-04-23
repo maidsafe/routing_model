@@ -7,14 +7,14 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::utilities::{
-    Attributes, Candidate, ChangeElder, GenesisPfxInfo, LocalEvent, MergeInfo, Name, Node,
-    NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource, RelocatedInfo, Rpc,
-    Section, SectionInfo, State,
+    Age, Attributes, Candidate, CandidateInfo, ChangeElder, GenesisPfxInfo, LocalEvent, MergeInfo,
+    Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource, RelocatedInfo,
+    Rpc, Section, SectionInfo, State,
 };
 use itertools::Itertools;
 use std::{
     cell::RefCell,
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt::{self, Debug, Formatter},
     rc::Rc,
 };
@@ -33,6 +33,7 @@ pub struct InnerAction {
 
     pub shortest_prefix: Option<Section>,
     pub section_members: BTreeMap<SectionInfo, Vec<Node>>,
+    pub next_target_interval: Name,
 
     pub merge_infos: Option<MergeInfo>,
     pub merge_needed: bool,
@@ -52,6 +53,7 @@ impl InnerAction {
 
             shortest_prefix: Default::default(),
             section_members: Default::default(),
+            next_target_interval: Name(0),
 
             merge_infos: Default::default(),
             merge_needed: false,
@@ -92,6 +94,16 @@ impl InnerAction {
         self
     }
 
+    pub fn with_next_target_interval(mut self, target: Name) -> Self {
+        self.next_target_interval = target;
+        self
+    }
+
+    pub fn with_shortest_prefix(mut self, shortest_prefix: Option<Section>) -> Self {
+        self.shortest_prefix = shortest_prefix;
+        self
+    }
+
     fn add_node(&mut self, node_state: NodeState) {
         self.our_nodes
             .push(NodeChange::AddWithState(node_state.node, node_state.state));
@@ -101,9 +113,29 @@ impl InnerAction {
         assert!(inserted.is_none());
     }
 
-    fn remove_node(&mut self, node: Node) {
-        self.our_nodes.push(NodeChange::Remove(node));
-        unwrap!(self.our_current_nodes.remove(&Name(node.0.name)));
+    fn remove_node(&mut self, name: Name) {
+        self.our_nodes.push(NodeChange::Remove(name));
+        unwrap!(self.our_current_nodes.remove(&name));
+    }
+
+    fn replace_node(&mut self, node_name: Name, node_state: NodeState) {
+        self.our_nodes.push(NodeChange::ReplaceWith(
+            node_name,
+            node_state.node,
+            node_state.state,
+        ));
+
+        let removed = self.our_current_nodes.remove(&node_name);
+        let inserted = self
+            .our_current_nodes
+            .insert(node_state.node.name(), node_state);
+
+        assert!(
+            removed.is_some() && inserted.is_none(),
+            "{:?} - {:?}",
+            removed,
+            inserted
+        );
     }
 
     fn set_node_state(&mut self, name: Name, state: State) {
@@ -162,13 +194,46 @@ impl Action {
         self.0.borrow_mut().our_events.push(event);
     }
 
-    pub fn add_node_resource_proofing(&self, candidate: Candidate) {
+    pub fn add_node_waiting_candidate_info(&self, candidate: Candidate) -> RelocatedInfo {
+        let target_interval_centre = self.0.borrow().next_target_interval;
+        self.0.borrow_mut().next_target_interval.0 += 1;
+
+        let info = RelocatedInfo {
+            candidate,
+            expected_age: Age(candidate.0.age + 1),
+            target_interval_centre,
+            section_info: self.0.borrow().our_section,
+        };
+
         let state = NodeState {
-            node: Node(candidate.0),
-            state: State::WaitingProofing,
+            node: Node(Attributes {
+                name: info.target_interval_centre.0,
+                age: info.expected_age.0,
+            }),
+            state: State::WaitingCandidateInfo(info),
             ..NodeState::default()
         };
+
         self.0.borrow_mut().add_node(state);
+        info
+    }
+
+    pub fn update_to_node_with_waiting_proof_state(&self, info: CandidateInfo) {
+        self.update_to_node(info, State::WaitingProofing);
+    }
+
+    pub fn update_to_node_with_relocating_hop_state(&self, info: CandidateInfo) {
+        self.update_to_node(info, State::RelocatingHop);
+    }
+
+    fn update_to_node(&self, info: CandidateInfo, state: State) {
+        let state = NodeState {
+            node: Node(info.new_public_id.0),
+            state,
+            ..NodeState::default()
+        };
+
+        self.0.borrow_mut().replace_node(info.destination, state);
     }
 
     pub fn set_candidate_online_state(&self, candidate: Candidate) {
@@ -186,23 +251,23 @@ impl Action {
     pub fn set_node_back_online_state(&self, node: Node) {
         self.0
             .borrow_mut()
-            .set_node_state(node.name(), State::RelocatingAnyReason);
+            .set_node_state(node.name(), State::RelocatingBackOnline);
     }
 
     pub fn set_candidate_relocating_state(&self, candidate: Candidate) {
         self.0
             .borrow_mut()
-            .set_node_state(candidate.name(), State::RelocatingAnyReason);
+            .set_node_state(candidate.name(), State::RelocatingAgeIncrease);
     }
 
-    pub fn set_candidate_relocated_state(&self, candidate: Candidate, info: RelocatedInfo) {
+    pub fn set_candidate_relocated_state(&self, info: RelocatedInfo) {
         self.0
             .borrow_mut()
-            .set_node_state(candidate.name(), State::Relocated(info));
+            .set_node_state(info.candidate.name(), State::Relocated(info));
     }
 
-    pub fn remove_node(&self, candidate: Candidate) {
-        self.0.borrow_mut().remove_node(Node(candidate.0));
+    pub fn purge_node_info(&self, name: Name) {
+        self.0.borrow_mut().remove_node(name);
     }
 
     pub fn check_shortest_prefix(&self) -> Option<Section> {
@@ -301,7 +366,16 @@ impl Action {
             .our_current_nodes
             .values()
             .filter(|state| !already_relocating.contains_key(&Candidate(state.node.0)))
-            .find(|state| state.state.is_relocating() && !state.is_elder)
+            .filter(|state| state.state.is_relocating() && !state.is_elder)
+            .max_by_key(|state| {
+                (
+                    state.state == State::RelocatingAgeIncrease,
+                    state.state == State::RelocatingHop,
+                    state.state == State::RelocatingBackOnline,
+                    state.node.0.age(),
+                    state.node.0.name(),
+                )
+            })
             .map(|state| (Candidate(state.node.0), Section::default()))
     }
 
@@ -311,6 +385,62 @@ impl Action {
             .our_current_nodes
             .get(&Name(candidate.0.name))
             .map(|state| state.state.is_relocating())
+            .unwrap_or(false)
+    }
+
+    pub fn waiting_nodes_connecting(&self) -> BTreeSet<Name> {
+        self.0
+            .borrow()
+            .our_current_nodes
+            .iter()
+            .filter_map(|(name, state)| match state.state {
+                State::WaitingCandidateInfo(_) => Some(*name),
+                _ => None,
+            })
+            .collect()
+    }
+
+    pub fn get_waiting_candidate_info(&self, candidate: Candidate) -> Option<RelocatedInfo> {
+        self.0
+            .borrow()
+            .our_current_nodes
+            .values()
+            .filter_map(|state| match state.state {
+                State::WaitingCandidateInfo(info) => Some(info),
+                _ => None,
+            })
+            .find(|info| info.candidate == candidate)
+    }
+
+    pub fn count_waiting_proofing_or_hop(&self) -> usize {
+        self.0
+            .borrow()
+            .our_current_nodes
+            .values()
+            .filter(|state| state.state.is_not_yet_full_node())
+            .count()
+    }
+
+    pub fn resource_proof_candidate(&self) -> Option<Candidate> {
+        self.0
+            .borrow()
+            .our_current_nodes
+            .values()
+            .filter(|state| state.state.is_resource_proofing())
+            .map(|state| Candidate(state.node.0))
+            .next()
+    }
+
+    pub fn is_valid_waited_info(&self, info: CandidateInfo) -> bool {
+        if !info.valid {
+            return false;
+        }
+
+        self.0
+            .borrow()
+            .our_current_nodes
+            .get(&info.destination)
+            .map(|state| state.state.is_waiting_candidate_info())
             .unwrap_or(false)
     }
 
@@ -327,9 +457,13 @@ impl Action {
         self.send_rpc(Rpc::NodeApproval(candidate, section));
     }
 
-    pub fn send_relocate_response_rpc(&self, candidate: Candidate) {
-        let section = self.0.borrow().our_section;
-        self.send_rpc(Rpc::RelocateResponse(candidate, section));
+    pub fn send_relocate_response_rpc(&self, info: RelocatedInfo) {
+        self.send_rpc(Rpc::RelocateResponse(info));
+    }
+
+    pub fn send_node_connected(&self, candidate: Candidate) {
+        let section = GenesisPfxInfo(self.0.borrow().our_section);
+        self.send_rpc(Rpc::NodeConnected(candidate, section));
     }
 
     pub fn send_candidate_proof_request(&self, candidate: Candidate) {
@@ -369,11 +503,12 @@ impl Action {
 
     pub fn send_candidate_info(&self, destination: Name) {
         let candidate = Candidate(self.0.borrow().our_attributes);
-        self.send_rpc(Rpc::CandidateInfo {
-            candidate,
+        self.send_rpc(Rpc::CandidateInfo(CandidateInfo {
+            old_public_id: candidate,
+            new_public_id: candidate,
             destination,
             valid: true,
-        });
+        }));
     }
 
     pub fn send_resource_proof_response(&self, destination: Name, proof: Proof) {

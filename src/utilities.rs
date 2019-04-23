@@ -10,7 +10,7 @@
 pub struct Name(pub i32);
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
-pub struct Age(i32);
+pub struct Age(pub i32);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Attributes {
@@ -21,6 +21,11 @@ pub struct Attributes {
 impl Attributes {
     pub fn name(self) -> Name {
         Name(self.name)
+    }
+
+    #[allow(dead_code)]
+    pub fn age(self) -> Age {
+        Age(self.age)
     }
 }
 
@@ -45,25 +50,41 @@ impl Node {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum NodeChange {
     AddWithState(Node, State),
+    ReplaceWith(Name, Node, State),
     State(Node, State),
-    Remove(Node),
+    Remove(Name),
     Elder(Node, bool),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct RelocatedInfo {
     pub candidate: Candidate,
+    pub expected_age: Age,
+    pub target_interval_centre: Name,
     pub section_info: SectionInfo,
+}
+
+impl RelocatedInfo {
+    #[allow(dead_code)]
+    pub fn old_public_id(&self) -> Candidate {
+        self.candidate
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub enum State {
     // Online ordered first Online node are chosen for elder
     Online,
-    // Relocating
-    RelocatingAnyReason,
+    // Relocating an adult that has reached its work unit count
+    RelocatingAgeIncrease,
+    // Relocating to a new hop with a shorter section prefix
+    RelocatingHop,
+    // Relocating back online node
+    RelocatingBackOnline,
     // Complete relocation, only waiting for info to be processed
     Relocated(RelocatedInfo),
+    // Not a full adult / Not known public id: still wait candidate info / connection
+    WaitingCandidateInfo(RelocatedInfo),
     // Not a full adult: still wait proofing
     WaitingProofing,
     // When a node that was previous online lost connection
@@ -72,7 +93,26 @@ pub enum State {
 
 impl State {
     pub fn is_relocating(self) -> bool {
-        self == State::RelocatingAnyReason
+        self == State::RelocatingAgeIncrease
+            || self == State::RelocatingHop
+            || self == State::RelocatingBackOnline
+    }
+    pub fn is_resource_proofing(self) -> bool {
+        self == State::WaitingProofing
+    }
+
+    pub fn is_waiting_candidate_info(self) -> bool {
+        match self {
+            State::WaitingCandidateInfo(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_not_yet_full_node(self) -> bool {
+        match self {
+            State::WaitingCandidateInfo(_) | State::WaitingProofing | State::RelocatingHop => true,
+            _ => false,
+        }
     }
 }
 
@@ -158,6 +198,14 @@ impl ProofSource {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CandidateInfo {
+    pub old_public_id: Candidate,
+    pub new_public_id: Candidate,
+    pub destination: Name,
+    pub valid: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Event {
     Rpc(Rpc),
     ParsecConsensus(ParsecVote),
@@ -167,11 +215,12 @@ pub enum Event {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Rpc {
     RefuseCandidate(Candidate),
-    RelocateResponse(Candidate, SectionInfo),
-    RelocatedInfo(Candidate, SectionInfo),
+    RelocateResponse(RelocatedInfo),
+    RelocatedInfo(RelocatedInfo),
 
     ExpectCandidate(Candidate),
-    ResendExpectCandidate(Section, Candidate),
+
+    NodeConnected(Candidate, GenesisPfxInfo),
 
     ResourceProof {
         candidate: Candidate,
@@ -189,11 +238,7 @@ pub enum Rpc {
         destination: Name,
         proof: Proof,
     },
-    CandidateInfo {
-        candidate: Candidate,
-        destination: Name,
-        valid: bool,
-    },
+    CandidateInfo(CandidateInfo),
 
     ConnectionInfoRequest {
         source: Name,
@@ -217,10 +262,10 @@ impl Rpc {
     pub fn destination(&self) -> Option<Name> {
         match self {
             Rpc::RefuseCandidate(_)
-            | Rpc::RelocateResponse(_, _)
-            | Rpc::RelocatedInfo(_, _)
+            | Rpc::RelocateResponse(_)
+            | Rpc::RelocatedInfo(_)
             | Rpc::ExpectCandidate(_)
-            | Rpc::ResendExpectCandidate(_, _)
+            | Rpc::NodeConnected(_, _)
             | Rpc::NodeApproval(_, _)
             | Rpc::Merge => None,
 
@@ -229,7 +274,7 @@ impl Rpc {
             }
 
             Rpc::ResourceProofResponse { destination, .. }
-            | Rpc::CandidateInfo { destination, .. }
+            | Rpc::CandidateInfo(CandidateInfo { destination, .. })
             | Rpc::ConnectionInfoRequest { destination, .. }
             | Rpc::ConnectionInfoResponse { destination, .. } => Some(*destination),
         }
@@ -239,8 +284,14 @@ impl Rpc {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ParsecVote {
     ExpectCandidate(Candidate),
+
+    CheckRelocatedNodeConnection,
+    CandidateConnected(CandidateInfo),
+
     Online(Candidate),
     PurgeCandidate(Candidate),
+    CheckResourceProof,
+
     AddElderNode(Node),
     RemoveElderNode(Node),
     NewSectionInfo(SectionInfo),
@@ -248,7 +299,7 @@ pub enum ParsecVote {
     WorkUnitIncrement,
     CheckRelocate,
     RefuseCandidate(Candidate),
-    RelocateResponse(Candidate, SectionInfo),
+    RelocateResponse(RelocatedInfo),
     RelocatedInfo(RelocatedInfo),
 
     CheckElder,
@@ -270,9 +321,12 @@ impl ParsecVote {
             | ParsecVote::Online(candidate)
             | ParsecVote::PurgeCandidate(candidate)
             | ParsecVote::RefuseCandidate(candidate)
-            | ParsecVote::RelocateResponse(candidate, _) => Some(*candidate),
+            | ParsecVote::RelocateResponse(RelocatedInfo { candidate, .. }) => Some(*candidate),
 
-            ParsecVote::AddElderNode(_)
+            ParsecVote::CheckRelocatedNodeConnection
+            | ParsecVote::CandidateConnected(_)
+            | ParsecVote::CheckResourceProof
+            | ParsecVote::AddElderNode(_)
             | ParsecVote::RemoveElderNode(_)
             | ParsecVote::NewSectionInfo(_)
             | ParsecVote::WorkUnitIncrement
@@ -288,7 +342,9 @@ impl ParsecVote {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LocalEvent {
+    CheckRelocatedNodeConnectionTimeout,
     TimeoutAccept,
+    CheckResourceProofTimeout,
 
     TimeoutWorkUnit,
     TimeoutCheckRelocate,
@@ -299,6 +355,11 @@ pub enum LocalEvent {
     ComputeResourceProofForElder(Name, ProofSource),
     NodeDetectedOffline(Node),
     NodeDetectedBackOnline(Node),
+
+    // Event that should be handled by a flow but are not.
+    NotYetImplementedEvent,
+    // Unexpected event ignored:
+    UnexpectedEventIgnored,
 }
 
 impl LocalEvent {

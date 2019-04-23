@@ -7,24 +7,25 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::{
-    state::{AcceptAsCandidateState, MemberState, ProcessElderChangeState},
+    state::{
+        MemberState, ProcessElderChangeState, StartRelocatedNodeConnectionState,
+        StartResourceProofState,
+    },
     utilities::{
-        Candidate, ChangeElder, Event, LocalEvent, MergeInfo, Node, ParsecVote, Proof, Rpc, Section,
+        Candidate, CandidateInfo, ChangeElder, Event, LocalEvent, MergeInfo, Name, Node,
+        ParsecVote, Proof, RelocatedInfo, Rpc,
     },
 };
 use unwrap::unwrap;
 
 #[derive(Debug, PartialEq, Default, Clone)]
-pub struct TopLevelDst(pub MemberState);
+pub struct RespondToRelocateRequests(pub MemberState);
 
-impl TopLevelDst {
+impl RespondToRelocateRequests {
     pub fn try_next(&self, event: Event) -> Option<MemberState> {
         match event {
             Event::Rpc(rpc) => self.try_rpc(rpc),
             Event::ParsecConsensus(vote) => self.try_consensus(vote),
-            Event::LocalEvent(LocalEvent::TimeoutAccept) => {
-                return Some(self.0.failure_event(event));
-            }
             _ => None,
         }
         .map(|state| state.0)
@@ -33,7 +34,6 @@ impl TopLevelDst {
     fn try_rpc(&self, rpc: Rpc) -> Option<Self> {
         match rpc {
             Rpc::ExpectCandidate(candidate) => Some(self.vote_parsec_expect_candidate(candidate)),
-            Rpc::ResourceProofResponse { .. } | Rpc::CandidateInfo { .. } => Some(self.discard()),
             _ => None,
         }
     }
@@ -41,46 +41,38 @@ impl TopLevelDst {
     fn try_consensus(&self, vote: ParsecVote) -> Option<Self> {
         match vote {
             ParsecVote::ExpectCandidate(candidate) => {
-                self.try_consensused_expect_candidate(candidate)
+                Some(self.try_consensused_expect_candidate(candidate))
             }
-            ParsecVote::Online(_) | ParsecVote::PurgeCandidate(_) => Some(self.discard()),
 
             // Delegate to other event loops
             _ => None,
         }
     }
 
-    fn try_consensused_expect_candidate(&self, candidate: Candidate) -> Option<Self> {
+    fn try_consensused_expect_candidate(&self, candidate: Candidate) -> Self {
         match (
-            self.0.dst_routine.is_processing_candidate,
-            self.0.action.check_shortest_prefix(),
+            self.0.action.get_waiting_candidate_info(candidate),
+            self.0.action.count_waiting_proofing_or_hop(),
         ) {
-            (_, Some(section)) => Some(self.resend_expect_candidate_rpc(candidate, section)),
-            (true, None) => Some(self.send_refuse_candidate_rpc(candidate)),
-            (false, None) => Some(self.concurrent_transition_to_accept_as_candidate(candidate)),
+            (Some(info), _) => self.resend_relocate_response_rpc(info),
+            (_, 0) => self.add_node_and_send_relocate_response_rpc(candidate),
+            (_, _) => self.send_refuse_candidate_rpc(candidate),
         }
     }
 
-    fn concurrent_transition_to_accept_as_candidate(&self, candidate: Candidate) -> Self {
-        self.set_is_processing_candidate(true)
-            .0
-            .as_accept_as_candidate()
-            .start_event_loop(candidate)
-            .0
-            .as_top_level_dst()
+    fn add_node_and_send_relocate_response_rpc(&self, candidate: Candidate) -> Self {
+        let relocated_info = self.0.action.add_node_waiting_candidate_info(candidate);
+        self.0.action.send_relocate_response_rpc(relocated_info);
+        self.clone()
     }
 
-    fn transition_exit_accept_as_candidate(&self) -> Self {
-        self.set_is_processing_candidate(false)
+    fn resend_relocate_response_rpc(&self, relocated_info: RelocatedInfo) -> Self {
+        self.0.action.send_relocate_response_rpc(relocated_info);
+        self.clone()
     }
 
-    fn set_is_processing_candidate(&self, value: bool) -> Self {
-        let mut state = self.clone();
-        state.0.dst_routine.is_processing_candidate = value;
-        state
-    }
-
-    fn discard(&self) -> Self {
+    fn send_refuse_candidate_rpc(&self, candidate: Candidate) -> Self {
+        self.0.action.send_rpc(Rpc::RefuseCandidate(candidate));
         self.clone()
     }
 
@@ -90,113 +82,268 @@ impl TopLevelDst {
             .vote_parsec(ParsecVote::ExpectCandidate(candidate));
         self.clone()
     }
+}
 
-    fn send_refuse_candidate_rpc(&self, candidate: Candidate) -> Self {
-        self.0.action.send_rpc(Rpc::RefuseCandidate(candidate));
+#[derive(Debug, PartialEq, Default, Clone)]
+pub struct StartRelocatedNodeConnection(pub MemberState);
+
+impl StartRelocatedNodeConnection {
+    // TODO - remove the `allow` once we have a test for this method.
+    #[allow(dead_code)]
+    fn start_event_loop(&self) -> Self {
+        self.schedule_time_out()
+    }
+
+    pub fn try_next(&self, event: Event) -> Option<MemberState> {
+        match event {
+            Event::Rpc(rpc) => self.try_rpc(rpc),
+            Event::ParsecConsensus(vote) => self.try_consensus(vote),
+            Event::LocalEvent(local_event) => self.try_local_event(local_event),
+        }
+        .map(|state| state.0)
+    }
+
+    fn try_rpc(&self, rpc: Rpc) -> Option<Self> {
+        match rpc {
+            Rpc::CandidateInfo(info) => Some(self.rpc_info(info)),
+            Rpc::ConnectionInfoResponse { .. } => {
+                self.try_connect_and_vote_parsec_candidate_connected(rpc)
+            }
+            _ => None,
+        }
+    }
+
+    fn try_consensus(&self, vote: ParsecVote) -> Option<Self> {
+        match vote {
+            ParsecVote::CandidateConnected(info) => Some(self.check_candidate_connected(info)),
+            ParsecVote::CheckRelocatedNodeConnection => Some(
+                self.reject_candidates_that_took_too_long()
+                    .schedule_time_out(),
+            ),
+            // Delegate to other event loops
+            _ => None,
+        }
+    }
+
+    fn try_local_event(&self, local_event: LocalEvent) -> Option<Self> {
+        match local_event {
+            LocalEvent::CheckRelocatedNodeConnectionTimeout => {
+                Some(self.vote_parsec_check_relocated_node_connection())
+            }
+            _ => None,
+        }
+    }
+
+    fn try_connect_and_vote_parsec_candidate_connected(&self, rpc: Rpc) -> Option<Self> {
+        if let Rpc::ConnectionInfoResponse { source, .. } = rpc {
+            if !self.routine_state().candidates_voted.contains(&source) {
+                if let Some(info) = self.routine_state().candidates_info.get(&source) {
+                    let mut state = self.clone();
+
+                    state
+                        .0
+                        .action
+                        .vote_parsec(ParsecVote::CandidateConnected(*info));
+                    let _ = state.mut_routine_state().candidates_voted.insert(source);
+
+                    return Some(state);
+                }
+            }
+        }
+
+        None
+    }
+
+    fn rpc_info(&self, info: CandidateInfo) -> Self {
+        if self.0.action.is_valid_waited_info(info) {
+            self.cache_candidate_info_and_send_connect_info(info)
+        } else {
+            self.discard()
+        }
+    }
+
+    fn check_candidate_connected(&self, info: CandidateInfo) -> Self {
+        if self.0.action.is_valid_waited_info(info) {
+            self.check_update_to_node(info)
+                .send_node_connected_rpc(info)
+        } else {
+            self.discard()
+        }
+    }
+
+    fn check_update_to_node(&self, info: CandidateInfo) -> Self {
+        match self.0.action.check_shortest_prefix() {
+            None => self.0.action.update_to_node_with_waiting_proof_state(info),
+            Some(_) => self.0.action.update_to_node_with_relocating_hop_state(info),
+        }
         self.clone()
     }
 
-    fn resend_expect_candidate_rpc(&self, candidate: Candidate, section: Section) -> Self {
+    fn routine_state(&self) -> &StartRelocatedNodeConnectionState {
+        &self.0.start_relocated_node_connection_state
+    }
+
+    fn mut_routine_state(&mut self) -> &mut StartRelocatedNodeConnectionState {
+        &mut self.0.start_relocated_node_connection_state
+    }
+
+    fn discard(&self) -> Self {
+        self.clone()
+    }
+
+    fn reject_candidates_that_took_too_long(&self) -> Self {
+        let mut state = self.clone();
+
+        let new_connecting_nodes = state.0.action.waiting_nodes_connecting();
+        let nodes_to_remove: Vec<Name> = new_connecting_nodes
+            .intersection(&state.routine_state().candidates)
+            .cloned()
+            .collect();
+
+        for name in nodes_to_remove {
+            state.0.action.purge_node_info(name);
+        }
+
+        let candidates = state.0.action.waiting_nodes_connecting();
+        let mut_routine_state = &mut state.mut_routine_state();
+
+        mut_routine_state.candidates = candidates.clone();
+        mut_routine_state.candidates_info = mut_routine_state
+            .candidates_info
+            .clone()
+            .into_iter()
+            .filter(|(name, _)| candidates.contains(name))
+            .collect();
+        mut_routine_state.candidates_voted = mut_routine_state
+            .candidates_voted
+            .clone()
+            .into_iter()
+            .filter(|name| candidates.contains(name))
+            .collect();
+
+        state
+    }
+
+    fn cache_candidate_info_and_send_connect_info(&self, info: CandidateInfo) -> Self {
+        let mut state = self.clone();
+
+        let _ = state
+            .mut_routine_state()
+            .candidates_info
+            .insert(info.new_public_id.name(), info);
+        state
+            .0
+            .action
+            .send_connection_info_request(info.new_public_id.name());
+
+        state
+    }
+
+    fn schedule_time_out(&self) -> Self {
         self.0
             .action
-            .send_rpc(Rpc::ResendExpectCandidate(section, candidate));
+            .schedule_event(LocalEvent::CheckRelocatedNodeConnectionTimeout);
+        self.clone()
+    }
+
+    fn send_node_connected_rpc(&self, info: CandidateInfo) -> Self {
+        self.0.action.send_node_connected(info.new_public_id);
+        self.clone()
+    }
+
+    fn vote_parsec_check_relocated_node_connection(&self) -> Self {
+        self.0
+            .action
+            .vote_parsec(ParsecVote::CheckRelocatedNodeConnection);
         self.clone()
     }
 }
 
 #[derive(Debug, PartialEq, Default, Clone)]
-pub struct AcceptAsCandidate(pub MemberState);
+pub struct StartResourceProof(pub MemberState);
 
-// AcceptAsCandidate Sub Routine
-impl AcceptAsCandidate {
-    fn start_event_loop(&self, candidate: Candidate) -> Self {
+impl StartResourceProof {
+    // TODO - remove the `allow` once we have a test for this method.
+    #[allow(dead_code)]
+    fn start_event_loop(&self) -> Self {
         self.0
-            .with_dst_sub_routine_accept_as_candidate(Some(AcceptAsCandidateState::new(candidate)))
-            .as_accept_as_candidate()
-            .add_node_resource_proofing()
-            .send_relocate_response_rpc()
-    }
-
-    fn exit_event_loop(&self) -> Self {
-        self.0
-            .with_dst_sub_routine_accept_as_candidate(None)
-            .as_top_level_dst()
-            .transition_exit_accept_as_candidate()
-            .0
-            .as_accept_as_candidate()
+            .action
+            .schedule_event(LocalEvent::CheckResourceProofTimeout);
+        self.clone()
     }
 
     pub fn try_next(&self, event: Event) -> Option<MemberState> {
         match event {
-            Event::Rpc(Rpc::CandidateInfo {
-                candidate, valid, ..
-            }) => self.try_rpc_info(candidate, valid),
             Event::Rpc(Rpc::ResourceProofResponse {
                 candidate, proof, ..
-            }) => self.try_rpc_proof(candidate, proof),
+            }) => Some(self.rpc_proof(candidate, proof)),
             Event::ParsecConsensus(vote) => self.try_consensus(vote),
-            Event::LocalEvent(LocalEvent::TimeoutAccept) => {
-                Some(self.vote_parsec_purge_candidate())
-            }
+            Event::LocalEvent(local_event) => self.try_local_event(local_event),
             // Delegate to other event loops
             _ => None,
         }
         .map(|state| state.0)
     }
 
-    fn try_rpc_info(&self, candidate: Candidate, valid: bool) -> Option<Self> {
-        if candidate != self.candidate() || self.routine_state().got_candidate_info {
-            return None;
-        }
+    fn rpc_proof(&self, candidate: Candidate, proof: Proof) -> Self {
+        let from_candidate = self.has_candidate() && candidate == self.candidate();
 
-        Some(if valid {
-            self.set_got_candidate_info(true).send_resource_proof_rpc()
+        if from_candidate && !self.routine_state().voted_online && proof.is_valid() {
+            match proof {
+                Proof::ValidPart => self.send_resource_proof_receipt_rpc(),
+                Proof::ValidEnd => self.set_voted_online(true).vote_parsec_online_candidate(),
+                Proof::Invalid => panic!("Only valid proof"),
+            }
         } else {
-            self.vote_parsec_purge_candidate()
-        })
-    }
-
-    fn try_rpc_proof(&self, candidate: Candidate, proof: Proof) -> Option<Self> {
-        if candidate != self.candidate() || self.routine_state().voted_online || !proof.is_valid() {
-            return None;
+            self.discard()
         }
-
-        Some(match proof {
-            Proof::ValidPart => self.send_resource_proof_receipt_rpc(),
-            Proof::ValidEnd => self.set_voted_online(true).vote_parsec_online_candidate(),
-            Proof::Invalid => panic!("Only valid proof"),
-        })
     }
 
     fn try_consensus(&self, vote: ParsecVote) -> Option<Self> {
-        if vote.candidate() != Some(self.candidate()) {
-            return None;
-        }
+        let for_candidate = self.has_candidate() && vote.candidate() == Some(self.candidate());
 
         match vote {
-            ParsecVote::Online(_) => Some(self.make_node_online()),
-            ParsecVote::PurgeCandidate(_) => Some(self.remove_node()),
+            ParsecVote::CheckResourceProof => Some(
+                self.set_resource_proof_candidate()
+                    .check_request_resource_proof(),
+            ),
+            ParsecVote::Online(_) if for_candidate => Some(self.make_node_online()),
+            ParsecVote::PurgeCandidate(_) if for_candidate => Some(self.purge_node_info()),
+            ParsecVote::Online(_) | ParsecVote::PurgeCandidate(_) => Some(self.discard()),
 
             // Delegate to other event loops
             _ => None,
         }
     }
 
-    fn routine_state(&self) -> &AcceptAsCandidateState {
-        match &self.0.dst_routine.sub_routine_accept_as_candidate {
-            Some(state) => state,
-            _ => panic!("Expect AcceptAsCandidate {:?}", &self),
+    fn try_local_event(&self, local_event: LocalEvent) -> Option<Self> {
+        match local_event {
+            LocalEvent::TimeoutAccept => Some(self.vote_parsec_purge_candidate()),
+            LocalEvent::CheckResourceProofTimeout => Some(self.vote_parsec_check_resource_proof()),
+            _ => None,
         }
     }
 
-    fn mut_routine_state(&mut self) -> &mut AcceptAsCandidateState {
-        let clone = self.clone();
-        match &mut self.0.dst_routine.sub_routine_accept_as_candidate {
-            Some(state) => state,
-            _ => panic!("Expect AcceptAsCandidate {:?}", &clone),
-        }
+    fn routine_state(&self) -> &StartResourceProofState {
+        &self.0.start_resource_proof
     }
 
+    fn mut_routine_state(&mut self) -> &mut StartResourceProofState {
+        &mut self.0.start_resource_proof
+    }
+
+    fn discard(&self) -> Self {
+        self.clone()
+    }
+
+    fn set_resource_proof_candidate(&self) -> Self {
+        let mut state = self.clone();
+        state.mut_routine_state().candidate = state.0.action.resource_proof_candidate();
+        state
+    }
+
+    // TODO - remove the `allow` once we have a test for this method.
+    #[allow(dead_code)]
     fn set_got_candidate_info(&self, value: bool) -> Self {
         let mut state = self.clone();
         state.mut_routine_state().got_candidate_info = value;
@@ -216,6 +363,11 @@ impl AcceptAsCandidate {
         self.clone()
     }
 
+    fn vote_parsec_check_resource_proof(&self) -> Self {
+        self.0.action.vote_parsec(ParsecVote::CheckResourceProof);
+        self.clone()
+    }
+
     fn vote_parsec_online_candidate(&self) -> Self {
         self.0
             .action
@@ -223,25 +375,36 @@ impl AcceptAsCandidate {
         self.clone()
     }
 
-    fn add_node_resource_proofing(&self) -> Self {
-        self.0.action.add_node_resource_proofing(self.candidate());
-        self.clone()
-    }
-
     fn make_node_online(&self) -> Self {
         self.0.action.set_candidate_online_state(self.candidate());
         self.0.action.send_node_approval_rpc(self.candidate());
-        self.exit_event_loop()
+        self.finish_resource_proof()
     }
 
-    fn remove_node(&self) -> Self {
-        self.0.action.remove_node(self.candidate());
-        self.exit_event_loop()
+    fn purge_node_info(&self) -> Self {
+        self.0.action.purge_node_info(self.candidate().name());
+        self.finish_resource_proof()
     }
 
-    fn send_relocate_response_rpc(&self) -> Self {
-        self.0.action.send_relocate_response_rpc(self.candidate());
-        self.clone()
+    fn finish_resource_proof(&self) -> Self {
+        let mut state = self.clone();
+        state.mut_routine_state().candidate = None;
+        state.mut_routine_state().voted_online = false;
+        state.mut_routine_state().got_candidate_info = false;
+
+        self.0
+            .action
+            .schedule_event(LocalEvent::CheckResourceProofTimeout);
+
+        state
+    }
+
+    fn check_request_resource_proof(&self) -> Self {
+        if self.has_candidate() {
+            self.send_resource_proof_rpc()
+        } else {
+            self.finish_resource_proof()
+        }
     }
 
     fn send_resource_proof_rpc(&self) -> Self {
@@ -255,7 +418,11 @@ impl AcceptAsCandidate {
     }
 
     fn candidate(&self) -> Candidate {
-        self.routine_state().candidate
+        unwrap!(self.routine_state().candidate)
+    }
+
+    fn has_candidate(&self) -> bool {
+        self.routine_state().candidate.is_some()
     }
 }
 
