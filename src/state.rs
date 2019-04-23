@@ -8,6 +8,7 @@
 
 use crate::{actions::*, flows_dst::*, flows_node::*, flows_src::*, utilities::*};
 use std::collections::{BTreeMap, BTreeSet};
+use unwrap::unwrap;
 
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct ProcessElderChangeState {
@@ -57,6 +58,13 @@ pub struct MemberState {
 
 impl MemberState {
     pub fn try_next(&self, event: Event) -> Option<Self> {
+        if let Some(test_event) = event.to_test_event() {
+            self.action.process_test_events(test_event);
+            return Some(self.clone());
+        }
+
+        let event = unwrap!(event.to_waited_event());
+
         if let Some(next) = self.as_check_and_process_elder_change().try_next(event) {
             return Some(next);
         }
@@ -96,19 +104,19 @@ impl MemberState {
         }
 
         match event {
-            Event::Rpc(Rpc::ConnectionInfoResponse { .. }) => {
+            WaitedEvent::Rpc(Rpc::ConnectionInfoResponse { .. }) => {
                 self.action
-                    .schedule_event(LocalEvent::NotYetImplementedEvent);
+                    .action_triggered(ActionTriggered::NotYetImplementedErrorTriggered);
                 Some(self.clone())
             }
             // These should only happen if a routine started them, so it should have
             // handled them too, but other routine are not there yet and we want to test
             // these do not fail.
-            Event::ParsecConsensus(ParsecVote::RemoveElderNode(_))
-            | Event::ParsecConsensus(ParsecVote::AddElderNode(_))
-            | Event::ParsecConsensus(ParsecVote::NewSectionInfo(_)) => {
+            WaitedEvent::ParsecConsensus(ParsecVote::RemoveElderNode(_))
+            | WaitedEvent::ParsecConsensus(ParsecVote::AddElderNode(_))
+            | WaitedEvent::ParsecConsensus(ParsecVote::NewSectionInfo(_)) => {
                 self.action
-                    .schedule_event(LocalEvent::UnexpectedEventIgnored);
+                    .action_triggered(ActionTriggered::UnexpectedEventErrorTriggered);
                 Some(self.clone())
             }
 
@@ -178,6 +186,13 @@ impl JoiningState {
     }
 
     pub fn try_next(&self, event: Event) -> Option<Self> {
+        if let Some(test_event) = event.to_test_event() {
+            self.action.process_test_events(test_event);
+            return Some(self.clone());
+        }
+
+        let event = unwrap!(event.to_waited_event());
+
         if let Some(next) = self.as_joining_relocate_candidate().try_next(event) {
             return Some(next);
         }

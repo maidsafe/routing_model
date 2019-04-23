@@ -56,6 +56,12 @@ pub enum NodeChange {
     Elder(Node, bool),
 }
 
+impl NodeChange {
+    pub fn to_event(self) -> Event {
+        Event::NodeChange(self)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct RelocatedInfo {
     pub candidate: Candidate,
@@ -205,11 +211,43 @@ pub struct CandidateInfo {
     pub valid: bool,
 }
 
+// Event passed to get out of "Wait for" state in flow diagram:
+// Pass to try_next to the implementations.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum WaitedEvent {
+    Rpc(Rpc),
+    ParsecConsensus(ParsecVote),
+    LocalEvent(LocalEvent),
+}
+
+// Event allowing to drive the tests and collect output, a superset of WaitedEvent.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Event {
     Rpc(Rpc),
     ParsecConsensus(ParsecVote),
     LocalEvent(LocalEvent),
+    TestEvent(TestEvent),
+
+    NodeChange(NodeChange),
+    ActionTriggered(ActionTriggered),
+}
+
+impl Event {
+    pub fn to_waited_event(&self) -> Option<WaitedEvent> {
+        match *self {
+            Event::Rpc(rpc) => Some(WaitedEvent::Rpc(rpc)),
+            Event::ParsecConsensus(parsec_vote) => Some(WaitedEvent::ParsecConsensus(parsec_vote)),
+            Event::LocalEvent(local_event) => Some(WaitedEvent::LocalEvent(local_event)),
+            Event::TestEvent(_) | Event::NodeChange(_) | Event::ActionTriggered(_) => None,
+        }
+    }
+
+    pub fn to_test_event(&self) -> Option<TestEvent> {
+        match *self {
+            Event::TestEvent(test_event) => Some(test_event),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -355,15 +393,41 @@ pub enum LocalEvent {
     ComputeResourceProofForElder(Name, ProofSource),
     NodeDetectedOffline(Node),
     NodeDetectedBackOnline(Node),
-
-    // Event that should be handled by a flow but are not.
-    NotYetImplementedEvent,
-    // Unexpected event ignored:
-    UnexpectedEventIgnored,
 }
 
 impl LocalEvent {
     pub fn to_event(&self) -> Event {
         Event::LocalEvent(*self)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TestEvent {
+    SetMergeNeeded(bool),
+    SetShortestPrefix(Option<Section>),
+    SetWorkUnitEnoughToRelocate(Node),
+}
+
+impl TestEvent {
+    pub fn to_event(self) -> Event {
+        Event::TestEvent(self)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ActionTriggered {
+    WorkUnitIncremented,
+    MergeInfoStored(MergeInfo),
+    OurSectionChanged(SectionInfo),
+
+    // WaitedEvent that should be handled by a flow but are not.
+    NotYetImplementedErrorTriggered,
+    // Unexpected event ignored.
+    UnexpectedEventErrorTriggered,
+}
+
+impl ActionTriggered {
+    pub fn to_event(self) -> Event {
+        Event::ActionTriggered(self)
     }
 }

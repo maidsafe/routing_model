@@ -10,9 +10,9 @@ use crate::{
     actions::*,
     state::*,
     utilities::{
-        Age, Attributes, Candidate, CandidateInfo, ChangeElder, Event, GenesisPfxInfo, LocalEvent,
-        MergeInfo, Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource,
-        RelocatedInfo, Rpc, Section, SectionInfo, State,
+        ActionTriggered, Age, Attributes, Candidate, CandidateInfo, Event, GenesisPfxInfo,
+        LocalEvent, MergeInfo, Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest,
+        ProofSource, RelocatedInfo, Rpc, Section, SectionInfo, State, TestEvent,
     },
 };
 use lazy_static::lazy_static;
@@ -92,7 +92,6 @@ const OUR_NAME: Name = Name(OUR_NODE.0.name);
 const OUR_NODE_CANDIDATE: Candidate = Candidate(NODE_ELDER_132.0);
 const OUR_PROOF_REQUEST: ProofRequest = ProofRequest { value: OUR_NAME.0 };
 const OUR_INITIAL_SECTION_INFO: SectionInfo = SectionInfo(OUR_SECTION, 0);
-const OUR_NEXT_SECTION_INFO: SectionInfo = SectionInfo(OUR_SECTION, 1);
 const OUR_GENESIS_INFO: GenesisPfxInfo = GenesisPfxInfo(OUR_INITIAL_SECTION_INFO);
 
 lazy_static! {
@@ -133,39 +132,11 @@ lazy_static! {
             DST_SECTION_INFO_200,
             &[NODE_ELDER_109, NODE_ELDER_110, NODE_ELDER_111]
         );
-    static ref SWAP_ELDER_109_NODE_1_SECTION_INFO_1: (ChangeElder, Vec<ParsecVote>) = (
-        ChangeElder {
-            changes: vec![(NODE_1, true), (NODE_ELDER_109, false),],
-            new_section: SECTION_INFO_1,
-        },
-        vec![
-            ParsecVote::AddElderNode(NODE_1),
-            ParsecVote::RemoveElderNode(NODE_ELDER_109),
-            ParsecVote::NewSectionInfo(SECTION_INFO_1),
-        ]
-    );
-    static ref SWAP_ELDER_130_YOUNG_205_SECTION_INFO_1: (ChangeElder, Vec<ParsecVote>) = (
-        ChangeElder {
-            changes: vec![(YOUNG_ADULT_205, true), (NODE_ELDER_130, false),],
-            new_section: SECTION_INFO_1,
-        },
-        vec![
-            ParsecVote::AddElderNode(YOUNG_ADULT_205),
-            ParsecVote::RemoveElderNode(NODE_ELDER_130),
-            ParsecVote::NewSectionInfo(SECTION_INFO_1),
-        ]
-    );
 }
 
 #[derive(Debug, PartialEq, Default, Clone)]
 struct AssertState {
-    action_our_votes: Vec<ParsecVote>,
-    action_our_rpcs: Vec<Rpc>,
-    action_our_nodes: Vec<NodeChange>,
-    action_our_events: Vec<LocalEvent>,
-    action_our_section: SectionInfo,
-    action_merge_infos: Option<MergeInfo>,
-    check_and_process_elder_change_routine: CheckAndProcessElderChangeState,
+    action_our_events: Vec<Event>,
 }
 
 fn process_events(mut state: MemberState, events: &[Event]) -> MemberState {
@@ -194,14 +165,7 @@ fn run_test(
 
     let final_state = (
         AssertState {
-            action_our_rpcs: action.our_rpc,
-            action_our_votes: action.our_votes,
-            action_our_nodes: action.our_nodes,
             action_our_events: action.our_events,
-            action_our_section: action.our_section,
-            action_merge_infos: action.merge_infos,
-            check_and_process_elder_change_routine: final_state
-                .check_and_process_elder_change_routine,
         },
         final_state.failure,
     );
@@ -249,12 +213,11 @@ mod dst_tests {
     #[test]
     fn rpc_expect_candidate() {
         run_test(
-            "Get RPC ExpectCandidate",
+            "",
             &initial_state_old_elders(),
             &[Rpc::ExpectCandidate(CANDIDATE_1_OLD).to_event()],
             &AssertState {
-                action_our_votes: vec![ParsecVote::ExpectCandidate(CANDIDATE_1_OLD)],
-                ..AssertState::default()
+                action_our_events: vec![ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event()],
             },
         );
     }
@@ -262,23 +225,25 @@ mod dst_tests {
     #[test]
     fn parsec_expect_candidate() {
         run_test(
-            "Get Parsec ExpectCandidate",
+            "",
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
             ],
             &AssertState {
-                action_our_nodes: vec![NodeChange::AddWithState(
-                    Node(Attributes {
-                        name: TARGET_INTERVAL_1.0,
-                        age: CANDIDATE_1.0.age,
-                    }),
-                    State::WaitingCandidateInfo(CANDIDATE_RELOCATED_INFO_1),
-                )],
-                action_our_events: vec![LocalEvent::CheckResourceProofTimeout],
-                action_our_rpcs: vec![Rpc::RelocateResponse(CANDIDATE_RELOCATED_INFO_1)],
-                ..AssertState::default()
+                action_our_events: vec![
+                    NodeChange::AddWithState(
+                        Node(Attributes {
+                            name: TARGET_INTERVAL_1.0,
+                            age: CANDIDATE_1.0.age,
+                        }),
+                        State::WaitingCandidateInfo(CANDIDATE_RELOCATED_INFO_1),
+                    )
+                    .to_event(),
+                    Rpc::RelocateResponse(CANDIDATE_RELOCATED_INFO_1).to_event(),
+                    LocalEvent::CheckResourceProofTimeout.to_event(),
+                ],
             },
         );
     }
@@ -291,12 +256,13 @@ mod dst_tests {
         );
 
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            "Get ExpectCandidate again for same candidate reply with same Rpc::RelocateResponse",
             &initial_state,
             &[ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event()],
             &AssertState {
-                action_our_rpcs: vec![Rpc::RelocateResponse(CANDIDATE_RELOCATED_INFO_1)],
-                ..AssertState::default()
+                action_our_events: vec![
+                    Rpc::RelocateResponse(CANDIDATE_RELOCATED_INFO_1).to_event()
+                ],
             },
         );
     }
@@ -312,16 +278,16 @@ mod dst_tests {
         );
 
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            "Reply with connection info until node is consensused connected",
             &initial_state,
             &[CANDIDATE_INFO_VALID_RPC_1.to_event()],
             &AssertState {
-                action_our_rpcs: vec![Rpc::ConnectionInfoRequest {
+                action_our_events: vec![Rpc::ConnectionInfoRequest {
                     source: OUR_NAME,
                     destination: CANDIDATE_1.name(),
                     connection_info: OUR_NAME.0,
-                }],
-                ..AssertState::default()
+                }
+                .to_event()],
             },
         );
     }
@@ -337,16 +303,16 @@ mod dst_tests {
         );
 
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            "Reply with connection info until node is consensused connected",
             &initial_state,
             &[CANDIDATE_INFO_VALID_RPC_1.to_event()],
             &AssertState {
-                action_our_rpcs: vec![Rpc::ConnectionInfoRequest {
+                action_our_events: vec![Rpc::ConnectionInfoRequest {
                     source: OUR_NAME,
                     destination: CANDIDATE_1.name(),
                     connection_info: OUR_NAME.0,
-                }],
-                ..AssertState::default()
+                }
+                .to_event()],
             },
         );
     }
@@ -363,7 +329,7 @@ mod dst_tests {
         );
 
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            "Candidate complete connection vote for it",
             &initial_state,
             &[Rpc::ConnectionInfoResponse {
                 source: CANDIDATE_1.name(),
@@ -372,8 +338,7 @@ mod dst_tests {
             }
             .to_event()],
             &AssertState {
-                action_our_votes: vec![CANDIDATE_INFO_VALID_PARSEC_VOTE_1],
-                ..AssertState::default()
+                action_our_events: vec![CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event()],
             },
         );
     }
@@ -397,7 +362,7 @@ mod dst_tests {
         );
 
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            "Already voted for the candidate: Let normal connect handler take it",
             &initial_state,
             &[Rpc::ConnectionInfoResponse {
                 source: CANDIDATE_1.name(),
@@ -406,8 +371,7 @@ mod dst_tests {
             }
             .to_event()],
             &AssertState {
-                action_our_events: vec![LocalEvent::NotYetImplementedEvent],
-                ..AssertState::default()
+                action_our_events: vec![ActionTriggered::NotYetImplementedErrorTriggered.to_event()],
             },
         );
     }
@@ -420,44 +384,38 @@ mod dst_tests {
         );
 
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            "Stop accepting old ExpectCandidate once we consensused the candidate connected",
             &initial_state,
             &[
                 CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
             ],
             &AssertState {
-                action_our_nodes: vec![NodeChange::ReplaceWith(
-                    TARGET_INTERVAL_1,
-                    NODE_1,
-                    State::WaitingProofing,
-                )],
-                action_our_rpcs: vec![
-                    Rpc::NodeConnected(CANDIDATE_1, OUR_GENESIS_INFO),
-                    Rpc::RefuseCandidate(CANDIDATE_1_OLD),
+                action_our_events: vec![
+                    NodeChange::ReplaceWith(TARGET_INTERVAL_1, NODE_1, State::WaitingProofing)
+                        .to_event(),
+                    Rpc::NodeConnected(CANDIDATE_1, OUR_GENESIS_INFO).to_event(),
+                    Rpc::RefuseCandidate(CANDIDATE_1_OLD).to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
 
     #[test]
     fn parsec_expect_candidate_then_parsec_candidate_info_with_shorter_section_exists() {
-        let initial_state = MemberState {
-            action: Action::new(
-                INNER_ACTION_OLD_ELDERS
-                    .clone()
-                    .with_shortest_prefix(Some(OTHER_SECTION_1)),
-            ),
-            ..MemberState::default()
-        };
         let initial_state = arrange_initial_state(
-            &initial_state,
-            &[ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event()],
+            &initial_state_old_elders(),
+            &[
+                TestEvent::SetShortestPrefix(Some(OTHER_SECTION_1)).to_event(),
+                ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
+            ],
         );
 
+        let description =
+        "Relocate candidate immediately when a section with shorter prefix exists.\
+        Still refuse new candidate until current candidates processing is complete, including relocation.";
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            description,
             &initial_state,
             &[
                 CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
@@ -465,17 +423,13 @@ mod dst_tests {
                 ParsecVote::CheckRelocate.to_event(),
             ],
             &AssertState {
-                action_our_nodes: vec![NodeChange::ReplaceWith(
-                    TARGET_INTERVAL_1,
-                    NODE_1,
-                    State::RelocatingHop,
-                )],
-                action_our_rpcs: vec![
-                    Rpc::NodeConnected(CANDIDATE_1, OUR_GENESIS_INFO),
-                    Rpc::RefuseCandidate(CANDIDATE_1_OLD),
-                    Rpc::ExpectCandidate(CANDIDATE_1),
+                action_our_events: vec![
+                    NodeChange::ReplaceWith(TARGET_INTERVAL_1, NODE_1, State::RelocatingHop)
+                        .to_event(),
+                    Rpc::NodeConnected(CANDIDATE_1, OUR_GENESIS_INFO).to_event(),
+                    Rpc::RefuseCandidate(CANDIDATE_1_OLD).to_event(),
+                    Rpc::ExpectCandidate(CANDIDATE_1).to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -491,7 +445,7 @@ mod dst_tests {
         );
 
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            "Discard irrelevant CandidateInfo RPCs that come after consensus on node connected.",
             &initial_state,
             &[CANDIDATE_INFO_VALID_RPC_1.to_event()],
             &AssertState::default(),
@@ -505,8 +459,7 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[LocalEvent::CheckRelocatedNodeConnectionTimeout.to_event()],
             &AssertState {
-                action_our_votes: vec![ParsecVote::CheckRelocatedNodeConnection],
-                ..AssertState::default()
+                action_our_events: vec![ParsecVote::CheckRelocatedNodeConnection.to_event()],
             },
         );
     }
@@ -529,9 +482,10 @@ mod dst_tests {
                 CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
             ],
             &AssertState {
-                action_our_nodes: vec![NodeChange::Remove(TARGET_INTERVAL_1)],
-                action_our_events: vec![LocalEvent::CheckRelocatedNodeConnectionTimeout],
-                ..AssertState::default()
+                action_our_events: vec![
+                    NodeChange::Remove(TARGET_INTERVAL_1).to_event(),
+                    LocalEvent::CheckRelocatedNodeConnectionTimeout.to_event(),
+                ],
             },
         );
     }
@@ -559,12 +513,11 @@ mod dst_tests {
                 .to_event(),
             ],
             &AssertState {
-                action_our_nodes: vec![NodeChange::Remove(TARGET_INTERVAL_1)],
                 action_our_events: vec![
-                    LocalEvent::CheckRelocatedNodeConnectionTimeout,
-                    LocalEvent::NotYetImplementedEvent,
+                    NodeChange::Remove(TARGET_INTERVAL_1).to_event(),
+                    LocalEvent::CheckRelocatedNodeConnectionTimeout.to_event(),
+                    ActionTriggered::NotYetImplementedErrorTriggered.to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -575,12 +528,12 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                //ParsecVote::CheckResourceProof.to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
             ],
         );
 
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            "Discard invalid CandidateInfo",
             &initial_state,
             &[Rpc::CandidateInfo(CandidateInfo {
                 old_public_id: CANDIDATE_1_OLD,
@@ -605,12 +558,11 @@ mod dst_tests {
         );
 
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            "Timeout for resource proof: Vote to fail the candidate's resource proof",
             &initial_state,
             &[LocalEvent::TimeoutAccept.to_event()],
             &AssertState {
-                action_our_votes: vec![ParsecVote::PurgeCandidate(CANDIDATE_1)],
-                ..AssertState::default()
+                action_our_events: vec![ParsecVote::PurgeCandidate(CANDIDATE_1).to_event()],
             },
         );
     }
@@ -626,7 +578,7 @@ mod dst_tests {
         );
 
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            "Discard CandidateInfo from candidate we are not or no longer expecting",
             &initial_state,
             &[Rpc::CandidateInfo(CandidateInfo {
                 old_public_id: CANDIDATE_2,
@@ -650,16 +602,19 @@ mod dst_tests {
         );
 
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            "Start resource proofing candidate: Send RPC and start timer.",
             &initial_state,
             &[ParsecVote::CheckResourceProof.to_event()],
             &AssertState {
-                action_our_rpcs: vec![Rpc::ResourceProof {
-                    candidate: CANDIDATE_1,
-                    source: OUR_NAME,
-                    proof: OUR_PROOF_REQUEST,
-                }],
-                ..AssertState::default()
+                action_our_events: vec![
+                    Rpc::ResourceProof {
+                        candidate: CANDIDATE_1,
+                        source: OUR_NAME,
+                        proof: OUR_PROOF_REQUEST,
+                    }
+                    .to_event(),
+                    LocalEvent::TimeoutAccept.to_event(),
+                ],
             },
         );
     }
@@ -676,7 +631,7 @@ mod dst_tests {
         );
 
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            "Respond to proof from current candidate with receipt.",
             &initial_state,
             &[Rpc::ResourceProofResponse {
                 candidate: CANDIDATE_1,
@@ -685,11 +640,11 @@ mod dst_tests {
             }
             .to_event()],
             &AssertState {
-                action_our_rpcs: vec![Rpc::ResourceProofReceipt {
+                action_our_events: vec![Rpc::ResourceProofReceipt {
                     candidate: CANDIDATE_1,
                     source: OUR_NAME,
-                }],
-                ..AssertState::default()
+                }
+                .to_event()],
             },
         );
     }
@@ -706,7 +661,7 @@ mod dst_tests {
         );
 
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            "Vote candidate online when receiving the end of the proof.",
             &initial_state,
             &[Rpc::ResourceProofResponse {
                 candidate: CANDIDATE_1,
@@ -715,8 +670,7 @@ mod dst_tests {
             }
             .to_event()],
             &AssertState {
-                action_our_votes: vec![ParsecVote::Online(CANDIDATE_1)],
-                ..AssertState::default()
+                action_our_events: vec![ParsecVote::Online(CANDIDATE_1).to_event()],
             },
         );
     }
@@ -739,7 +693,7 @@ mod dst_tests {
         );
 
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            "Discard further ResourceProofResponse once voted online.",
             &initial_state,
             &[Rpc::ResourceProofResponse {
                 candidate: CANDIDATE_1,
@@ -763,7 +717,7 @@ mod dst_tests {
         );
 
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            "Discard invalid proofs.",
             &initial_state,
             &[Rpc::ResourceProofResponse {
                 candidate: CANDIDATE_1,
@@ -787,7 +741,7 @@ mod dst_tests {
         );
 
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            "Discard final proof from a candidate that is not the current one.",
             &initial_state,
             &[Rpc::ResourceProofResponse {
                 candidate: CANDIDATE_2,
@@ -810,8 +764,12 @@ mod dst_tests {
             ],
         );
 
+        let description =
+            "Ignore parsec votes not for the current candidate.\
+             The previous running resource proof for CANDIDATE_2 may have been cancelled,\
+             or we would only see either of the votes later on.";
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            description,
             &initial_state,
             &[
                 ParsecVote::Online(CANDIDATE_2).to_event(),
@@ -824,12 +782,11 @@ mod dst_tests {
     #[test]
     fn rpc_merge() {
         run_test(
-            "Get RPC Merge",
+            "",
             &initial_state_old_elders(),
             &[Rpc::Merge.to_event()],
             &AssertState {
-                action_our_votes: vec![ParsecVote::NeighbourMerge(MergeInfo)],
-                ..AssertState::default()
+                action_our_events: vec![ParsecVote::NeighbourMerge(MergeInfo).to_event()],
             },
         );
     }
@@ -837,15 +794,11 @@ mod dst_tests {
     #[test]
     fn parsec_neighbour_merge() {
         run_test(
-            "Get Parsec NeighbourMergeInfo",
+            "When a neighbour Merge RPC is consensused, store its info to decide merging",
             &initial_state_old_elders(),
             &[ParsecVote::NeighbourMerge(MergeInfo).to_event()],
             &AssertState {
-                action_merge_infos: Some(MergeInfo),
-                check_and_process_elder_change_routine: CheckAndProcessElderChangeState {
-                    ..Default::default()
-                },
-                ..AssertState::default()
+                action_our_events: vec![ActionTriggered::MergeInfoStored(MergeInfo).to_event()],
             },
         );
     }
@@ -858,16 +811,11 @@ mod dst_tests {
         );
 
         run_test(
-            "Get Parsec NeighbourMergeInfo then CheckElder",
+            "When we have neighbour info, we are ready to merge on next CheckElder",
             &initial_state,
             &[ParsecVote::CheckElder.to_event()],
             &AssertState {
-                action_merge_infos: Some(MergeInfo),
-                action_our_rpcs: vec![Rpc::Merge],
-                check_and_process_elder_change_routine: CheckAndProcessElderChangeState {
-                    ..Default::default()
-                },
-                ..AssertState::default()
+                action_our_events: vec![Rpc::Merge.to_event()],
             },
         );
     }
@@ -875,15 +823,16 @@ mod dst_tests {
     #[test]
     fn parsec_merge_needed() {
         let initial_state = initial_state_old_elders();
-        initial_state.action.set_merge_needed(true);
 
         run_test(
-            "Merge needed",
+            "Merge if we detect our section needs merging on CheckElder",
             &initial_state,
-            &[ParsecVote::CheckElder.to_event()],
+            &[
+                TestEvent::SetMergeNeeded(true).to_event(),
+                ParsecVote::CheckElder.to_event(),
+            ],
             &AssertState {
-                action_our_rpcs: vec![Rpc::Merge],
-                ..AssertState::default()
+                action_our_events: vec![Rpc::Merge.to_event()],
             },
         );
     }
@@ -899,21 +848,23 @@ mod dst_tests {
             ],
         );
 
+        let description =
+            "Accept a new node (No Elder Change): send RPC and schedule next ResourceProof.\
+             CheckElder has no work.";
         run_test(
-            "Get Parsec ExpectCandidate then Online (No Elder Change)",
+            description,
             &initial_state,
             &[
                 ParsecVote::Online(CANDIDATE_1).to_event(),
                 ParsecVote::CheckElder.to_event(),
             ],
             &AssertState {
-                action_our_rpcs: vec![Rpc::NodeApproval(CANDIDATE_1, OUR_GENESIS_INFO)],
-                action_our_nodes: vec![SET_ONLINE_NODE_1],
                 action_our_events: vec![
-                    LocalEvent::CheckResourceProofTimeout,
-                    LocalEvent::TimeoutCheckElder,
+                    SET_ONLINE_NODE_1.to_event(),
+                    Rpc::NodeApproval(CANDIDATE_1, OUR_GENESIS_INFO).to_event(),
+                    LocalEvent::CheckResourceProofTimeout.to_event(),
+                    LocalEvent::TimeoutCheckElder.to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -929,26 +880,25 @@ mod dst_tests {
             ],
         );
 
+        let description =
+            "Accept a new node (Elder Change): send RPC and schedule next ResourceProof.\
+             CheckElder start updating the section when triggered.";
         run_test(
-            "Get Parsec ExpectCandidate then Online (Elder Change)",
+            description,
             &initial_state,
             &[
                 ParsecVote::Online(CANDIDATE_1).to_event(),
                 ParsecVote::CheckElder.to_event(),
             ],
             &AssertState {
-                action_our_rpcs: vec![Rpc::NodeApproval(CANDIDATE_1, OUR_GENESIS_INFO)],
-                action_our_votes: SWAP_ELDER_109_NODE_1_SECTION_INFO_1.1.clone(),
-                action_our_nodes: vec![SET_ONLINE_NODE_1],
-                check_and_process_elder_change_routine: CheckAndProcessElderChangeState {
-                    sub_routine_process_elder_change: ProcessElderChangeState {
-                        is_active: true,
-                        change_elder: Some(SWAP_ELDER_109_NODE_1_SECTION_INFO_1.0.clone()),
-                        wait_votes: SWAP_ELDER_109_NODE_1_SECTION_INFO_1.1.clone(),
-                    },
-                },
-                action_our_events: vec![LocalEvent::CheckResourceProofTimeout],
-                ..AssertState::default()
+                action_our_events: vec![
+                    SET_ONLINE_NODE_1.to_event(),
+                    Rpc::NodeApproval(CANDIDATE_1, OUR_GENESIS_INFO).to_event(),
+                    LocalEvent::CheckResourceProofTimeout.to_event(),
+                    ParsecVote::AddElderNode(NODE_1).to_event(),
+                    ParsecVote::RemoveElderNode(NODE_ELDER_109).to_event(),
+                    ParsecVote::NewSectionInfo(SECTION_INFO_1).to_event(),
+                ],
             },
         );
     }
@@ -966,9 +916,8 @@ mod dst_tests {
             ],
         );
 
-        let description =
-            "Get Parsec ExpectCandidate then Online (Elder Change) RemoveElderNode \
-             for wrong elder, AddElderNode for wrong node, NewSectionInfo for wrong section";
+        let description = "Accept a new node (Elder Change) - Check Elder Triggered.\
+                           Error if consensus unexpected votes.";
         run_test(
             description,
             &initial_state,
@@ -979,18 +928,10 @@ mod dst_tests {
             ],
             &AssertState {
                 action_our_events: vec![
-                    LocalEvent::UnexpectedEventIgnored,
-                    LocalEvent::UnexpectedEventIgnored,
-                    LocalEvent::UnexpectedEventIgnored,
+                    ActionTriggered::UnexpectedEventErrorTriggered.to_event(),
+                    ActionTriggered::UnexpectedEventErrorTriggered.to_event(),
+                    ActionTriggered::UnexpectedEventErrorTriggered.to_event(),
                 ],
-                check_and_process_elder_change_routine: CheckAndProcessElderChangeState {
-                    sub_routine_process_elder_change: ProcessElderChangeState {
-                        is_active: true,
-                        change_elder: Some(SWAP_ELDER_109_NODE_1_SECTION_INFO_1.0.clone()),
-                        wait_votes: SWAP_ELDER_109_NODE_1_SECTION_INFO_1.1.clone(),
-                    },
-                },
-                ..AssertState::default()
             },
         );
     }
@@ -1008,23 +949,13 @@ mod dst_tests {
             ],
         );
 
+        let description = "Accept a new node (Elder Change) - Check Elder Triggered.\
+                           Nothing change until all expected votes have happened.";
         run_test(
-            "Get Parsec ExpectCandidate then Online (Elder Change) then RemoveElderNode",
+            description,
             &initial_state,
             &[ParsecVote::RemoveElderNode(NODE_ELDER_109).to_event()],
-            &AssertState {
-                check_and_process_elder_change_routine: CheckAndProcessElderChangeState {
-                    sub_routine_process_elder_change: ProcessElderChangeState {
-                        is_active: true,
-                        change_elder: Some(SWAP_ELDER_109_NODE_1_SECTION_INFO_1.0.clone()),
-                        wait_votes: vec![
-                            ParsecVote::AddElderNode(NODE_1),
-                            ParsecVote::NewSectionInfo(SECTION_INFO_1),
-                        ],
-                    },
-                },
-                ..AssertState::default()
-            },
+            &AssertState::default(),
         );
     }
 
@@ -1042,28 +973,29 @@ mod dst_tests {
             ],
         );
 
+        let description =
+            "Accept a new node (Elder Change) - Check Elder Triggered and votes completed.\
+             Once completed, update our section and elders";
         run_test(
-            "Get Parsec ExpectCandidate then Online (Elder Change) then \
-             RemoveElderNode, AddElderNode, NewSectionInfo",
+            description,
             &initial_state,
             &[
                 ParsecVote::AddElderNode(NODE_1).to_event(),
                 ParsecVote::NewSectionInfo(SECTION_INFO_1).to_event(),
             ],
             &AssertState {
-                action_our_section: SECTION_INFO_1,
-                action_our_nodes: vec![
-                    NodeChange::Elder(NODE_1, true),
-                    NodeChange::Elder(NODE_ELDER_109, false),
+                action_our_events: vec![
+                    NodeChange::Elder(NODE_1, true).to_event(),
+                    NodeChange::Elder(NODE_ELDER_109, false).to_event(),
+                    ActionTriggered::OurSectionChanged(SECTION_INFO_1).to_event(),
+                    LocalEvent::TimeoutCheckElder.to_event(),
                 ],
-                action_our_events: vec![LocalEvent::TimeoutCheckElder],
-                ..AssertState::default()
             },
         );
     }
 
     #[test]
-    fn parsec_expect_candidate_when_candidate_completed_with_elder_change() {
+    fn parsec_expect_candidate_when_candidate_completed_with_elder_change_in_progress() {
         let initial_state = arrange_initial_state(
             &initial_state_young_elders(),
             &[
@@ -1072,42 +1004,43 @@ mod dst_tests {
                 ParsecVote::CheckResourceProof.to_event(),
                 ParsecVote::Online(CANDIDATE_1).to_event(),
                 ParsecVote::CheckElder.to_event(),
-                ParsecVote::RemoveElderNode(NODE_ELDER_109).to_event(),
-                ParsecVote::AddElderNode(NODE_1).to_event(),
-                ParsecVote::NewSectionInfo(SECTION_INFO_1).to_event(),
             ],
         );
 
+        let description =
+            "Accept new candidate even if elder where changed by first candidate joining.\
+             Use old section as new one not yet consensused.";
         run_test(
-            "Get Parsec ExpectCandidate after first candidate completed \
-             with elder change",
+            description,
             &initial_state,
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_2_OLD).to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
             ],
             &&AssertState {
-                action_our_section: SECTION_INFO_1,
-                action_our_nodes: vec![NodeChange::AddWithState(
-                    Node(Attributes {
-                        name: TARGET_INTERVAL_2.0,
-                        age: CANDIDATE_2.0.age,
-                    }),
-                    State::WaitingCandidateInfo(RelocatedInfo {
+                action_our_events: vec![
+                    NodeChange::AddWithState(
+                        Node(Attributes {
+                            name: TARGET_INTERVAL_2.0,
+                            age: CANDIDATE_2.0.age,
+                        }),
+                        State::WaitingCandidateInfo(RelocatedInfo {
+                            candidate: CANDIDATE_2_OLD,
+                            expected_age: CANDIDATE_2.0.age(),
+                            target_interval_centre: TARGET_INTERVAL_2,
+                            section_info: OUR_INITIAL_SECTION_INFO,
+                        }),
+                    )
+                    .to_event(),
+                    Rpc::RelocateResponse(RelocatedInfo {
                         candidate: CANDIDATE_2_OLD,
                         expected_age: CANDIDATE_2.0.age(),
                         target_interval_centre: TARGET_INTERVAL_2,
-                        section_info: OUR_NEXT_SECTION_INFO,
-                    }),
-                )],
-                action_our_events: vec![LocalEvent::CheckResourceProofTimeout],
-                action_our_rpcs: vec![Rpc::RelocateResponse(RelocatedInfo {
-                    candidate: CANDIDATE_2_OLD,
-                    expected_age: CANDIDATE_2.0.age(),
-                    target_interval_centre: TARGET_INTERVAL_2,
-                    section_info: OUR_NEXT_SECTION_INFO,
-                })],
-                ..AssertState::default()
+                        section_info: OUR_INITIAL_SECTION_INFO,
+                    })
+                    .to_event(),
+                    LocalEvent::CheckResourceProofTimeout.to_event(),
+                ],
             },
         );
     }
@@ -1124,13 +1057,14 @@ mod dst_tests {
         );
 
         run_test(
-            "Get Parsec ExpectCandidate then Purge",
+            "Complete proof failing the candidate: Remove and schedule next candidate.",
             &initial_state,
             &[ParsecVote::PurgeCandidate(CANDIDATE_1).to_event()],
             &AssertState {
-                action_our_nodes: vec![REMOVE_NODE_1],
-                action_our_events: vec![LocalEvent::CheckResourceProofTimeout],
-                ..AssertState::default()
+                action_our_events: vec![
+                    REMOVE_NODE_1.to_event(),
+                    LocalEvent::CheckResourceProofTimeout.to_event(),
+                ],
             },
         );
     }
@@ -1147,21 +1081,21 @@ mod dst_tests {
         );
 
         run_test(
-            &"Get Parsec 2 ExpectCandidate",
+            "Refuse new candidate if first not completed",
             &initial_state,
             &[ParsecVote::ExpectCandidate(CANDIDATE_2_OLD).to_event()],
             &AssertState {
-                action_our_rpcs: vec![Rpc::RefuseCandidate(CANDIDATE_2_OLD)],
-                ..AssertState::default()
+                action_our_events: vec![Rpc::RefuseCandidate(CANDIDATE_2_OLD).to_event()],
             },
         );
     }
 
     #[test]
     fn parsec_unexpected_purge_online() {
+        let description = "Get unexpected Parsec consensus Online and PurgeCandidate. \
+                           Candidate may have triggered both votes: only consider the first";
         run_test(
-            "Get unexpected Parsec consensus Online and PurgeCandidate. \
-             Candidate may have trigger both vote: only consider the first",
+            description,
             &initial_state_old_elders(),
             &[
                 ParsecVote::Online(CANDIDATE_1).to_event(),
@@ -1173,9 +1107,10 @@ mod dst_tests {
 
     #[test]
     fn rpc_unexpected_candidate_info_resource_proof_response() {
+        let description = "Get unexpected RPC CandidateInfo and ResourceProofResponse. \
+                           Candidate RPC may arrive after candidate was purged or accepted";
         run_test(
-            "Get unexpected RPC CandidateInfo and ResourceProofResponse. \
-             Candidate RPC may arrive after candidate was purged or accepted",
+            description,
             &initial_state_old_elders(),
             &[
                 CANDIDATE_INFO_VALID_RPC_1.to_event(),
@@ -1200,11 +1135,10 @@ mod dst_tests {
                 LocalEvent::NodeDetectedBackOnline(NODE_ELDER_131).to_event(),
             ],
             &AssertState {
-                action_our_votes: vec![
-                    ParsecVote::Offline(NODE_ELDER_130),
-                    ParsecVote::BackOnline(NODE_ELDER_131),
+                action_our_events: vec![
+                    ParsecVote::Offline(NODE_ELDER_130).to_event(),
+                    ParsecVote::BackOnline(NODE_ELDER_131).to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -1212,12 +1146,13 @@ mod dst_tests {
     #[test]
     fn parsec_offline() {
         run_test(
-            "Get parsec consensus offline",
+            "Change node state when consensus offline.",
             &initial_state_old_elders(),
             &[ParsecVote::Offline(NODE_ELDER_130).to_event()],
             &AssertState {
-                action_our_nodes: vec![NodeChange::State(NODE_ELDER_130, State::Offline)],
-                ..AssertState::default()
+                action_our_events: vec![
+                    NodeChange::State(NODE_ELDER_130, State::Offline).to_event()
+                ],
             },
         );
     }
@@ -1229,19 +1164,15 @@ mod dst_tests {
             &[ParsecVote::Offline(NODE_ELDER_130).to_event()],
         );
         run_test(
-            "Get parsec consensus offline then check elder",
+            "On CheckElder, initiate removing offline elder from the SectionInfo.",
             &initial_state,
             &[ParsecVote::CheckElder.to_event()],
             &AssertState {
-                action_our_votes: SWAP_ELDER_130_YOUNG_205_SECTION_INFO_1.1.clone(),
-                check_and_process_elder_change_routine: CheckAndProcessElderChangeState {
-                    sub_routine_process_elder_change: ProcessElderChangeState {
-                        is_active: true,
-                        change_elder: Some(SWAP_ELDER_130_YOUNG_205_SECTION_INFO_1.0.clone()),
-                        wait_votes: SWAP_ELDER_130_YOUNG_205_SECTION_INFO_1.1.clone(),
-                    },
-                },
-                ..AssertState::default()
+                action_our_events: vec![
+                    ParsecVote::AddElderNode(YOUNG_ADULT_205).to_event(),
+                    ParsecVote::RemoveElderNode(NODE_ELDER_130).to_event(),
+                    ParsecVote::NewSectionInfo(SECTION_INFO_1).to_event(),
+                ],
             },
         );
     }
@@ -1253,15 +1184,15 @@ mod dst_tests {
             &[ParsecVote::Offline(NODE_ELDER_130).to_event()],
         );
         run_test(
-            "Get parsec consensus offline then parsec online",
+            "Relocate nodes coming back online.",
             &initial_state,
             &[ParsecVote::BackOnline(NODE_ELDER_130).to_event()],
             &AssertState {
-                action_our_nodes: vec![NodeChange::State(
+                action_our_events: vec![NodeChange::State(
                     NODE_ELDER_130,
                     State::RelocatingBackOnline,
-                )],
-                ..AssertState::default()
+                )
+                .to_event()],
             },
         );
     }
@@ -1277,42 +1208,34 @@ mod src_tests {
     #[test]
     fn local_event_time_out_work_unit() {
         run_test(
-            "",
+            "Work unit timer and vote together to keep span consistent.",
             &initial_state_old_elders(),
             &[LocalEvent::TimeoutWorkUnit.to_event()],
             &AssertState {
-                action_our_events: vec![LocalEvent::TimeoutWorkUnit],
-                action_our_votes: vec![ParsecVote::WorkUnitIncrement],
-                ..AssertState::default()
+                action_our_events: vec![
+                    ParsecVote::WorkUnitIncrement.to_event(),
+                    LocalEvent::TimeoutWorkUnit.to_event(),
+                ],
             },
         );
     }
 
     #[test]
     fn start_relocation() {
-        let initial_state = MemberState {
-            action: Action::new(
-                INNER_ACTION_OLD_ELDERS
-                    .clone()
-                    .with_enough_work_to_relocate(&[YOUNG_ADULT_205]),
-            ),
-            ..MemberState::default()
-        };
-
         run_test(
-            "Trigger events to relocate node",
-            &initial_state,
+            "When work unit is sufficient, CheckRelocate initiate relocating non elder node.",
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
             ],
             &AssertState {
-                action_our_rpcs: vec![Rpc::ExpectCandidate(CANDIDATE_205)],
-                action_our_nodes: vec![NodeChange::State(
-                    YOUNG_ADULT_205,
-                    State::RelocatingAgeIncrease,
-                )],
-                ..AssertState::default()
+                action_our_events: vec![
+                    ActionTriggered::WorkUnitIncremented.to_event(),
+                    NodeChange::State(YOUNG_ADULT_205, State::RelocatingAgeIncrease).to_event(),
+                    Rpc::ExpectCandidate(CANDIDATE_205).to_event(),
+                ],
             },
         );
     }
@@ -1320,15 +1243,9 @@ mod src_tests {
     #[test]
     fn parsec_check_relocate_trigger_again_no_retry() {
         let initial_state = arrange_initial_state(
-            &MemberState {
-                action: Action::new(
-                    INNER_ACTION_OLD_ELDERS
-                        .clone()
-                        .with_enough_work_to_relocate(&[YOUNG_ADULT_205]),
-                ),
-                ..MemberState::default()
-            },
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
             ],
@@ -1348,15 +1265,9 @@ mod src_tests {
     #[test]
     fn parsec_relocation_trigger_again_until_retry() {
         let initial_state = arrange_initial_state(
-            &MemberState {
-                action: Action::new(
-                    INNER_ACTION_OLD_ELDERS
-                        .clone()
-                        .with_enough_work_to_relocate(&[YOUNG_ADULT_205]),
-                ),
-                ..MemberState::default()
-            },
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
@@ -1369,8 +1280,7 @@ mod src_tests {
             &initial_state,
             &[ParsecVote::CheckRelocate.to_event()],
             &AssertState {
-                action_our_rpcs: vec![Rpc::ExpectCandidate(CANDIDATE_205)],
-                ..AssertState::default()
+                action_our_events: vec![Rpc::ExpectCandidate(CANDIDATE_205).to_event()],
             },
         );
     }
@@ -1381,7 +1291,6 @@ mod src_tests {
             action: Action::new(
                 INNER_ACTION_OLD_ELDERS
                     .clone()
-                    .with_enough_work_to_relocate(&[YOUNG_ADULT_205])
                     .extend_current_nodes_with(
                         &NodeState {
                             state: State::RelocatingHop,
@@ -1407,6 +1316,7 @@ mod src_tests {
             description,
             &initial_state,
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
@@ -1414,54 +1324,37 @@ mod src_tests {
                 ParsecVote::CheckRelocate.to_event(),
             ],
             &AssertState {
-                action_our_rpcs: vec![
-                    Rpc::ExpectCandidate(CANDIDATE_205),
-                    Rpc::ExpectCandidate(CANDIDATE_1_OLD),
-                    Rpc::ExpectCandidate(CANDIDATE_2),
-                    Rpc::ExpectCandidate(CANDIDATE_205),
+                action_our_events: vec![
+                    ActionTriggered::WorkUnitIncremented.to_event(),
+                    NodeChange::State(YOUNG_ADULT_205, State::RelocatingAgeIncrease).to_event(),
+                    Rpc::ExpectCandidate(CANDIDATE_205).to_event(),
+                    Rpc::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
+                    Rpc::ExpectCandidate(CANDIDATE_2).to_event(),
+                    Rpc::ExpectCandidate(CANDIDATE_205).to_event(),
                 ],
-                action_our_nodes: vec![NodeChange::State(
-                    YOUNG_ADULT_205,
-                    State::RelocatingAgeIncrease,
-                )],
-                ..AssertState::default()
             },
         );
     }
 
     #[test]
     fn parsec_relocate_trigger_elder_change() {
-        let initial_state = MemberState {
-            action: Action::new(
-                INNER_ACTION_OLD_ELDERS
-                    .clone()
-                    .with_enough_work_to_relocate(&[NODE_ELDER_130]),
-            ),
-            ..MemberState::default()
-        };
-
         run_test(
-            "Get Parsec ExpectCandidate then Online (Elder Change)",
-            &initial_state,
+            "Work unit trigger relocation (Elder Change): Update Elders and relocate only after.",
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(NODE_ELDER_130).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
                 ParsecVote::CheckElder.to_event(),
             ],
             &AssertState {
-                action_our_nodes: vec![NodeChange::State(
-                    NODE_ELDER_130,
-                    State::RelocatingAgeIncrease,
-                )],
-                action_our_votes: SWAP_ELDER_130_YOUNG_205_SECTION_INFO_1.1.clone(),
-                check_and_process_elder_change_routine: CheckAndProcessElderChangeState {
-                    sub_routine_process_elder_change: ProcessElderChangeState {
-                        is_active: true,
-                        change_elder: Some(SWAP_ELDER_130_YOUNG_205_SECTION_INFO_1.0.clone()),
-                        wait_votes: SWAP_ELDER_130_YOUNG_205_SECTION_INFO_1.1.clone(),
-                    },
-                },
-                ..AssertState::default()
+                action_our_events: vec![
+                    ActionTriggered::WorkUnitIncremented.to_event(),
+                    NodeChange::State(NODE_ELDER_130, State::RelocatingAgeIncrease).to_event(),
+                    ParsecVote::AddElderNode(YOUNG_ADULT_205).to_event(),
+                    ParsecVote::RemoveElderNode(NODE_ELDER_130).to_event(),
+                    ParsecVote::NewSectionInfo(SECTION_INFO_1).to_event(),
+                ],
             },
         );
     }
@@ -1469,22 +1362,16 @@ mod src_tests {
     #[test]
     fn parsec_relocate_trigger_elder_change_complete() {
         let initial_state = arrange_initial_state(
-            &MemberState {
-                action: Action::new(
-                    INNER_ACTION_OLD_ELDERS
-                        .clone()
-                        .with_enough_work_to_relocate(&[NODE_ELDER_130]),
-                ),
-                ..MemberState::default()
-            },
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(NODE_ELDER_130).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckElder.to_event(),
             ],
         );
 
         run_test(
-            "Get Parsec ExpectCandidate then Online (Elder Change)",
+            "Work unit trigger relocation (Elder Change): Update Elders and relocate only after.",
             &initial_state,
             &[
                 ParsecVote::RemoveElderNode(NODE_ELDER_130).to_event(),
@@ -1493,14 +1380,13 @@ mod src_tests {
                 ParsecVote::CheckRelocate.to_event(),
             ],
             &AssertState {
-                action_our_section: SECTION_INFO_1,
-                action_our_nodes: vec![
-                    NodeChange::Elder(YOUNG_ADULT_205, true),
-                    NodeChange::Elder(NODE_ELDER_130, false),
+                action_our_events: vec![
+                    NodeChange::Elder(YOUNG_ADULT_205, true).to_event(),
+                    NodeChange::Elder(NODE_ELDER_130, false).to_event(),
+                    ActionTriggered::OurSectionChanged(SECTION_INFO_1).to_event(),
+                    LocalEvent::TimeoutCheckElder.to_event(),
+                    Rpc::ExpectCandidate(CANDIDATE_130).to_event(),
                 ],
-                action_our_rpcs: vec![Rpc::ExpectCandidate(CANDIDATE_130)],
-                action_our_events: vec![LocalEvent::TimeoutCheckElder],
-                ..AssertState::default()
             },
         );
     }
@@ -1508,27 +1394,20 @@ mod src_tests {
     #[test]
     fn parsec_relocation_trigger_refuse_candidate_rpc() {
         let initial_state = arrange_initial_state(
-            &MemberState {
-                action: Action::new(
-                    INNER_ACTION_OLD_ELDERS
-                        .clone()
-                        .with_enough_work_to_relocate(&[YOUNG_ADULT_205]),
-                ),
-                ..MemberState::default()
-            },
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
             ],
         );
 
         run_test(
-            "Get Parsec ExpectCandidate",
+            "Vote for RPC to be processed",
             &initial_state,
             &[Rpc::RefuseCandidate(CANDIDATE_205).to_event()],
             &AssertState {
-                action_our_votes: vec![ParsecVote::RefuseCandidate(CANDIDATE_205)],
-                ..AssertState::default()
+                action_our_events: vec![ParsecVote::RefuseCandidate(CANDIDATE_205).to_event()],
             },
         );
     }
@@ -1536,33 +1415,27 @@ mod src_tests {
     #[test]
     fn parsec_relocation_trigger_relocate_response_rpc() {
         let initial_state = arrange_initial_state(
-            &MemberState {
-                action: Action::new(
-                    INNER_ACTION_OLD_ELDERS
-                        .clone()
-                        .with_enough_work_to_relocate(&[YOUNG_ADULT_205]),
-                ),
-                ..MemberState::default()
-            },
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
             ],
         );
 
         run_test(
-            "Get Parsec ExpectCandidate",
+            "Vote for RPC to be proceesed",
             &initial_state,
             &[
                 Rpc::RelocateResponse(get_relocated_info(CANDIDATE_205, DST_SECTION_INFO_200))
                     .to_event(),
             ],
             &AssertState {
-                action_our_votes: vec![ParsecVote::RelocateResponse(get_relocated_info(
+                action_our_events: vec![ParsecVote::RelocateResponse(get_relocated_info(
                     CANDIDATE_205,
                     DST_SECTION_INFO_200,
-                ))],
-                ..AssertState::default()
+                ))
+                .to_event()],
             },
         );
     }
@@ -1570,22 +1443,18 @@ mod src_tests {
     #[test]
     fn parsec_relocation_trigger_accept() {
         let initial_state = arrange_initial_state(
-            &MemberState {
-                action: Action::new(
-                    INNER_ACTION_OLD_ELDERS
-                        .clone()
-                        .with_enough_work_to_relocate(&[YOUNG_ADULT_205]),
-                ),
-                ..MemberState::default()
-            },
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
             ],
         );
 
+        let description = "When RelocateResponse, update node state and vote for RelocatedInfo.\
+                           When RelocatedInfo consensused send RPC and remove node,";
         run_test(
-            "Get Parsec ExpectCandidate",
+            description,
             &initial_state,
             &[
                 ParsecVote::RelocateResponse(get_relocated_info(
@@ -1597,22 +1466,21 @@ mod src_tests {
                     .to_event(),
             ],
             &AssertState {
-                action_our_votes: vec![ParsecVote::RelocatedInfo(get_relocated_info(
-                    CANDIDATE_205,
-                    DST_SECTION_INFO_200,
-                ))],
-                action_our_rpcs: vec![Rpc::RelocatedInfo(get_relocated_info(
-                    CANDIDATE_205,
-                    DST_SECTION_INFO_200,
-                ))],
-                action_our_nodes: vec![
+                action_our_events: vec![
                     NodeChange::State(
                         YOUNG_ADULT_205,
                         State::Relocated(get_relocated_info(CANDIDATE_205, DST_SECTION_INFO_200)),
-                    ),
-                    NodeChange::Remove(YOUNG_ADULT_205.name()),
+                    )
+                    .to_event(),
+                    ParsecVote::RelocatedInfo(get_relocated_info(
+                        CANDIDATE_205,
+                        DST_SECTION_INFO_200,
+                    ))
+                    .to_event(),
+                    Rpc::RelocatedInfo(get_relocated_info(CANDIDATE_205, DST_SECTION_INFO_200))
+                        .to_event(),
+                    NodeChange::Remove(YOUNG_ADULT_205.name()).to_event(),
                 ],
-                ..AssertState::default()
             },
         );
     }
@@ -1620,22 +1488,16 @@ mod src_tests {
     #[test]
     fn parsec_relocation_trigger_refuse() {
         let initial_state = arrange_initial_state(
-            &MemberState {
-                action: Action::new(
-                    INNER_ACTION_OLD_ELDERS
-                        .clone()
-                        .with_enough_work_to_relocate(&[YOUNG_ADULT_205]),
-                ),
-                ..MemberState::default()
-            },
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
             ],
         );
 
         run_test(
-            "Get Parsec ExpectCandidate",
+            "On refuse, only get ready to resend ExpectCandidate on next check.",
             &initial_state,
             &[ParsecVote::RefuseCandidate(CANDIDATE_205).to_event()],
             &AssertState::default(),
@@ -1645,15 +1507,9 @@ mod src_tests {
     #[test]
     fn parsec_relocation_trigger_refuse_trigger_again() {
         let initial_state = arrange_initial_state(
-            &MemberState {
-                action: Action::new(
-                    INNER_ACTION_OLD_ELDERS
-                        .clone()
-                        .with_enough_work_to_relocate(&[YOUNG_ADULT_205]),
-                ),
-                ..MemberState::default()
-            },
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckRelocate.to_event(),
                 ParsecVote::RefuseCandidate(CANDIDATE_205).to_event(),
@@ -1661,12 +1517,11 @@ mod src_tests {
         );
 
         run_test(
-            "Get Parsec ExpectCandidate",
+            "On next check after refuse, re-send ExpectCandidate.",
             &initial_state,
             &[ParsecVote::CheckRelocate.to_event()],
             &AssertState {
-                action_our_rpcs: vec![Rpc::ExpectCandidate(CANDIDATE_205)],
-                ..AssertState::default()
+                action_our_events: vec![Rpc::ExpectCandidate(CANDIDATE_205).to_event()],
             },
         );
     }
@@ -1674,15 +1529,9 @@ mod src_tests {
     #[test]
     fn parsec_relocation_trigger_elder_change_refuse_trigger_again() {
         let initial_state = arrange_initial_state(
-            &MemberState {
-                action: Action::new(
-                    INNER_ACTION_OLD_ELDERS
-                        .clone()
-                        .with_enough_work_to_relocate(&[NODE_ELDER_130]),
-                ),
-                ..MemberState::default()
-            },
+            &initial_state_old_elders(),
             &[
+                TestEvent::SetWorkUnitEnoughToRelocate(NODE_ELDER_130).to_event(),
                 ParsecVote::WorkUnitIncrement.to_event(),
                 ParsecVote::CheckElder.to_event(),
                 ParsecVote::RemoveElderNode(NODE_ELDER_130).to_event(),
@@ -1694,45 +1543,34 @@ mod src_tests {
         );
 
         run_test(
-            "Get Parsec ExpectCandidate",
+            "On next check after refuse, re-send ExpectCandidate for a node that was elder.",
             &initial_state,
             &[ParsecVote::CheckRelocate.to_event()],
             &AssertState {
-                action_our_section: SECTION_INFO_1,
-                action_our_rpcs: vec![Rpc::ExpectCandidate(CANDIDATE_130)],
-                ..AssertState::default()
+                action_our_events: vec![Rpc::ExpectCandidate(CANDIDATE_130).to_event()],
             },
         );
     }
 
     #[test]
-    fn unexpected_refuse_candidate() {
+    fn unexpected_refuse_or_accept_candidate() {
         run_test(
-            "Get RPC ExpectCandidate",
-            &initial_state_old_elders(),
-            &[Rpc::RefuseCandidate(CANDIDATE_205).to_event()],
-            &AssertState {
-                action_our_votes: vec![ParsecVote::RefuseCandidate(CANDIDATE_205)],
-                ..AssertState::default()
-            },
-        );
-    }
-
-    #[test]
-    fn unexpected_relocate_response() {
-        run_test(
-            "Get RPC ExpectCandidate",
+            "Vote for unexpected responses to ExpectCandidate as we may be lagging.",
             &initial_state_old_elders(),
             &[
+                Rpc::RefuseCandidate(CANDIDATE_205).to_event(),
                 Rpc::RelocateResponse(get_relocated_info(CANDIDATE_205, DST_SECTION_INFO_200))
                     .to_event(),
             ],
             &AssertState {
-                action_our_votes: vec![ParsecVote::RelocateResponse(get_relocated_info(
-                    CANDIDATE_205,
-                    DST_SECTION_INFO_200,
-                ))],
-                ..AssertState::default()
+                action_our_events: vec![
+                    ParsecVote::RefuseCandidate(CANDIDATE_205).to_event(),
+                    ParsecVote::RelocateResponse(get_relocated_info(
+                        CANDIDATE_205,
+                        DST_SECTION_INFO_200,
+                    ))
+                    .to_event(),
+                ],
             },
         );
     }
@@ -1745,11 +1583,7 @@ mod node_tests {
 
     #[derive(Debug, PartialEq, Default, Clone)]
     struct AssertJoiningState {
-        action_our_votes: Vec<ParsecVote>,
-        action_our_rpcs: Vec<Rpc>,
-        action_our_nodes: Vec<NodeChange>,
-        action_our_events: Vec<LocalEvent>,
-        action_our_section: SectionInfo,
+        action_our_events: Vec<Event>,
         join_routine: JoiningRelocateCandidateState,
     }
 
@@ -1764,11 +1598,7 @@ mod node_tests {
 
         let final_state = (
             AssertJoiningState {
-                action_our_rpcs: action.our_rpc,
-                action_our_votes: action.our_votes,
-                action_our_nodes: action.our_nodes,
                 action_our_events: action.our_events,
-                action_our_section: action.our_section,
                 join_routine: final_state.join_routine,
             },
             final_state.failure,
@@ -1817,26 +1647,27 @@ mod node_tests {
             &initial_joining_state_with_dst_200().start(DST_SECTION_INFO_200),
             &[],
             &AssertJoiningState {
-                action_our_rpcs: vec![
+                action_our_events: vec![
                     Rpc::ConnectionInfoRequest {
                         source: OUR_NAME,
                         destination: NAME_109,
                         connection_info: OUR_NAME.0,
-                    },
+                    }
+                    .to_event(),
                     Rpc::ConnectionInfoRequest {
                         source: OUR_NAME,
                         destination: NAME_110,
                         connection_info: OUR_NAME.0,
-                    },
+                    }
+                    .to_event(),
                     Rpc::ConnectionInfoRequest {
                         source: OUR_NAME,
                         destination: NAME_111,
                         connection_info: OUR_NAME.0,
-                    },
-                ],
-                action_our_events: vec![
-                    LocalEvent::JoiningTimeoutResendCandidateInfo,
-                    LocalEvent::JoiningTimeoutRefused,
+                    }
+                    .to_event(),
+                    LocalEvent::JoiningTimeoutResendCandidateInfo.to_event(),
+                    LocalEvent::JoiningTimeoutRefused.to_event(),
                 ],
                 join_routine: JoiningRelocateCandidateState {
                     has_resource_proofs: to_collect![
@@ -1846,7 +1677,6 @@ mod node_tests {
                     ],
                     ..JoiningRelocateCandidateState::default()
                 },
-                ..AssertJoiningState::default()
             },
         );
     }
@@ -1876,19 +1706,21 @@ mod node_tests {
                 .to_event(),
             ],
             &AssertJoiningState {
-                action_our_rpcs: vec![
+                action_our_events: vec![
                     Rpc::CandidateInfo(CandidateInfo {
                         old_public_id: OUR_NODE_CANDIDATE,
                         new_public_id: OUR_NODE_CANDIDATE,
                         destination: NAME_110,
                         valid: true,
-                    }),
+                    })
+                    .to_event(),
                     Rpc::CandidateInfo(CandidateInfo {
                         old_public_id: OUR_NODE_CANDIDATE,
                         new_public_id: OUR_NODE_CANDIDATE,
                         destination: NAME_111,
                         valid: true,
-                    }),
+                    })
+                    .to_event(),
                 ],
                 join_routine: JoiningRelocateCandidateState {
                     has_resource_proofs: to_collect![
@@ -1898,7 +1730,6 @@ mod node_tests {
                     ],
                     ..JoiningRelocateCandidateState::default()
                 },
-                ..AssertJoiningState::default()
             },
         );
     }
@@ -1924,7 +1755,7 @@ mod node_tests {
         );
 
         run_joining_test(
-            "",
+            "Start computing resource proof when receiving ResourceProof RPC.",
             &initial_state,
             &[Rpc::ResourceProof {
                 candidate: OUR_NODE_CANDIDATE,
@@ -1936,7 +1767,8 @@ mod node_tests {
                 action_our_events: vec![LocalEvent::ComputeResourceProofForElder(
                     NAME_111,
                     ProofSource(2),
-                )],
+                )
+                .to_event()],
                 join_routine: JoiningRelocateCandidateState {
                     has_resource_proofs: to_collect![
                         (NAME_109, (false, None)),
@@ -1945,7 +1777,6 @@ mod node_tests {
                     ],
                     ..JoiningRelocateCandidateState::default()
                 },
-                ..AssertJoiningState::default()
             },
         );
     }
@@ -1971,15 +1802,16 @@ mod node_tests {
         );
 
         run_joining_test(
-            "",
+            "When proof computed, start sending response to correct Elder.",
             &initial_state,
             &[LocalEvent::ComputeResourceProofForElder(NAME_111, ProofSource(2)).to_event()],
             &AssertJoiningState {
-                action_our_rpcs: vec![Rpc::ResourceProofResponse {
+                action_our_events: vec![Rpc::ResourceProofResponse {
                     candidate: OUR_NODE_CANDIDATE,
                     destination: NAME_111,
                     proof: Proof::ValidPart,
-                }],
+                }
+                .to_event()],
                 join_routine: JoiningRelocateCandidateState {
                     has_resource_proofs: to_collect![
                         (NAME_109, (false, None)),
@@ -1988,7 +1820,6 @@ mod node_tests {
                     ],
                     ..JoiningRelocateCandidateState::default()
                 },
-                ..AssertJoiningState::default()
             },
         );
     }
@@ -2015,7 +1846,7 @@ mod node_tests {
         );
 
         run_joining_test(
-            "",
+            "On receiving receipt, send the next part of the proof to that Elder.",
             &initial_state,
             &[Rpc::ResourceProofReceipt {
                 candidate: OUR_NODE_CANDIDATE,
@@ -2023,11 +1854,12 @@ mod node_tests {
             }
             .to_event()],
             &AssertJoiningState {
-                action_our_rpcs: vec![Rpc::ResourceProofResponse {
+                action_our_events: vec![Rpc::ResourceProofResponse {
                     candidate: OUR_NODE_CANDIDATE,
                     destination: NAME_111,
                     proof: Proof::ValidEnd,
-                }],
+                }
+                .to_event()],
                 join_routine: JoiningRelocateCandidateState {
                     has_resource_proofs: to_collect![
                         (NAME_109, (false, None)),
@@ -2036,7 +1868,6 @@ mod node_tests {
                     ],
                     ..JoiningRelocateCandidateState::default()
                 },
-                ..AssertJoiningState::default()
             },
         );
     }
@@ -2068,23 +1899,25 @@ mod node_tests {
         );
 
         run_joining_test(
-            "",
+            "(out of date with diagram): on time out try to connect again.",
             &initial_state,
             &[LocalEvent::JoiningTimeoutResendCandidateInfo.to_event()],
             &AssertJoiningState {
-                action_our_rpcs: vec![
+                action_our_events: vec![
                     Rpc::ConnectionInfoRequest {
                         source: OUR_NAME,
                         destination: NAME_109,
                         connection_info: OUR_NAME.0,
-                    },
+                    }
+                    .to_event(),
                     Rpc::ConnectionInfoRequest {
                         source: OUR_NAME,
                         destination: NAME_110,
                         connection_info: OUR_NAME.0,
-                    },
+                    }
+                    .to_event(),
+                    LocalEvent::JoiningTimeoutResendCandidateInfo.to_event(),
                 ],
-                action_our_events: vec![LocalEvent::JoiningTimeoutResendCandidateInfo],
                 join_routine: JoiningRelocateCandidateState {
                     has_resource_proofs: to_collect![
                         (NAME_109, (false, None)),
@@ -2093,7 +1926,6 @@ mod node_tests {
                     ],
                     ..JoiningRelocateCandidateState::default()
                 },
-                ..AssertJoiningState::default()
             },
         );
     }
@@ -2106,7 +1938,7 @@ mod node_tests {
         );
 
         run_joining_test(
-            "",
+            "On NodeApproval: complete the routine work.",
             &initial_state,
             &[
                 Rpc::NodeApproval(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))

@@ -9,7 +9,7 @@
 use crate::{
     state::*,
     utilities::{
-        Event, GenesisPfxInfo, LocalEvent, Name, ProofRequest, ProofSource, Rpc, SectionInfo,
+        GenesisPfxInfo, LocalEvent, Name, ProofRequest, ProofSource, Rpc, SectionInfo, WaitedEvent,
     },
 };
 use unwrap::unwrap;
@@ -25,10 +25,10 @@ impl JoiningRelocateCandidate {
             .start_refused_timeout()
     }
 
-    pub fn try_next(&self, event: Event) -> Option<JoiningState> {
+    pub fn try_next(&self, event: WaitedEvent) -> Option<JoiningState> {
         match event {
-            Event::Rpc(rpc) => self.try_rpc(rpc),
-            Event::LocalEvent(local_event) => self.try_local_event(local_event),
+            WaitedEvent::Rpc(rpc) => self.try_rpc(rpc),
+            WaitedEvent::LocalEvent(local_event) => self.try_local_event(local_event),
             _ => None,
         }
         .or_else(|| Some(self.discard()))

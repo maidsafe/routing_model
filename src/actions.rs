@@ -7,9 +7,9 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::utilities::{
-    Age, Attributes, Candidate, CandidateInfo, ChangeElder, GenesisPfxInfo, LocalEvent, MergeInfo,
-    Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest, ProofSource, RelocatedInfo,
-    Rpc, Section, SectionInfo, State,
+    ActionTriggered, Age, Attributes, Candidate, CandidateInfo, ChangeElder, Event, GenesisPfxInfo,
+    LocalEvent, MergeInfo, Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest,
+    ProofSource, RelocatedInfo, Rpc, Section, SectionInfo, State, TestEvent,
 };
 use itertools::Itertools;
 use std::{
@@ -26,10 +26,7 @@ pub struct InnerAction {
     pub our_section: SectionInfo,
     pub our_current_nodes: BTreeMap<Name, NodeState>,
 
-    pub our_votes: Vec<ParsecVote>,
-    pub our_rpc: Vec<Rpc>,
-    pub our_events: Vec<LocalEvent>,
-    pub our_nodes: Vec<NodeChange>,
+    pub our_events: Vec<Event>,
 
     pub shortest_prefix: Option<Section>,
     pub section_members: BTreeMap<SectionInfo, Vec<Node>>,
@@ -46,10 +43,7 @@ impl InnerAction {
             our_section: Default::default(),
             our_current_nodes: Default::default(),
 
-            our_votes: Default::default(),
-            our_rpc: Default::default(),
             our_events: Default::default(),
-            our_nodes: Default::default(),
 
             shortest_prefix: Default::default(),
             section_members: Default::default(),
@@ -80,14 +74,6 @@ impl InnerAction {
         self.extend_current_nodes(&node_states)
     }
 
-    pub fn with_enough_work_to_relocate(mut self, nodes: &[Node]) -> Self {
-        self.our_current_nodes
-            .values_mut()
-            .filter(|state| nodes.contains(&state.node))
-            .for_each(|state| state.work_units_done = state.node.0.age);
-        self
-    }
-
     pub fn with_section_members(mut self, section: SectionInfo, nodes: &[Node]) -> Self {
         let inserted = self.section_members.insert(section, nodes.to_vec());
         assert!(inserted.is_none());
@@ -99,14 +85,9 @@ impl InnerAction {
         self
     }
 
-    pub fn with_shortest_prefix(mut self, shortest_prefix: Option<Section>) -> Self {
-        self.shortest_prefix = shortest_prefix;
-        self
-    }
-
     fn add_node(&mut self, node_state: NodeState) {
-        self.our_nodes
-            .push(NodeChange::AddWithState(node_state.node, node_state.state));
+        self.our_events
+            .push(NodeChange::AddWithState(node_state.node, node_state.state).to_event());
         let inserted = self
             .our_current_nodes
             .insert(node_state.node.name(), node_state);
@@ -114,16 +95,13 @@ impl InnerAction {
     }
 
     fn remove_node(&mut self, name: Name) {
-        self.our_nodes.push(NodeChange::Remove(name));
+        self.our_events.push(NodeChange::Remove(name).to_event());
         unwrap!(self.our_current_nodes.remove(&name));
     }
 
     fn replace_node(&mut self, node_name: Name, node_state: NodeState) {
-        self.our_nodes.push(NodeChange::ReplaceWith(
-            node_name,
-            node_state.node,
-            node_state.state,
-        ));
+        self.our_events
+            .push(NodeChange::ReplaceWith(node_name, node_state.node, node_state.state).to_event());
 
         let removed = self.our_current_nodes.remove(&node_name);
         let inserted = self
@@ -142,22 +120,28 @@ impl InnerAction {
         let node = &mut self.our_current_nodes.get_mut(&name).unwrap();
 
         node.state = state;
-        self.our_nodes.push(NodeChange::State(node.node, state));
+        self.our_events
+            .push(NodeChange::State(node.node, state).to_event());
     }
 
     fn set_elder_state(&mut self, name: Name, value: bool) {
         let node = &mut self.our_current_nodes.get_mut(&name).unwrap();
 
         node.is_elder = value;
-        self.our_nodes.push(NodeChange::Elder(node.node, value));
+        self.our_events
+            .push(NodeChange::Elder(node.node, value).to_event());
     }
 
     fn set_section_info(&mut self, section: SectionInfo) {
         self.our_section = section;
+        self.our_events
+            .push(ActionTriggered::OurSectionChanged(section).to_event());
     }
 
     fn store_merge_infos(&mut self, merge_info: MergeInfo) {
         self.merge_infos = Some(merge_info);
+        self.our_events
+            .push(ActionTriggered::MergeInfoStored(merge_info).to_event());
     }
 }
 
@@ -175,23 +159,42 @@ impl Action {
 
     pub fn remove_processed_state(&self) {
         let inner = &mut self.0.borrow_mut();
-
-        inner.our_votes.clear();
-        inner.our_rpc.clear();
-        inner.our_nodes.clear();
         inner.our_events.clear();
     }
 
+    pub fn process_test_events(&self, event: TestEvent) {
+        let set_enough_work_to_relocate = |name: Name| {
+            let _ = self
+                .0
+                .borrow_mut()
+                .our_current_nodes
+                .get_mut(&name)
+                .map(|state| state.work_units_done = state.node.0.age);
+        };
+
+        match event {
+            TestEvent::SetMergeNeeded(value) => self.0.borrow_mut().merge_needed = value,
+            TestEvent::SetShortestPrefix(value) => self.0.borrow_mut().shortest_prefix = value,
+            TestEvent::SetWorkUnitEnoughToRelocate(node) => {
+                set_enough_work_to_relocate(node.name())
+            }
+        }
+    }
+
     pub fn vote_parsec(&self, vote: ParsecVote) {
-        self.0.borrow_mut().our_votes.push(vote);
+        self.0.borrow_mut().our_events.push(vote.to_event());
     }
 
     pub fn send_rpc(&self, rpc: Rpc) {
-        self.0.borrow_mut().our_rpc.push(rpc);
+        self.0.borrow_mut().our_events.push(rpc.to_event());
     }
 
     pub fn schedule_event(&self, event: LocalEvent) {
-        self.0.borrow_mut().our_events.push(event);
+        self.0.borrow_mut().our_events.push(event.to_event());
+    }
+
+    pub fn action_triggered(&self, event: ActionTriggered) {
+        self.0.borrow_mut().our_events.push(event.to_event());
     }
 
     pub fn add_node_waiting_candidate_info(&self, candidate: Candidate) -> RelocatedInfo {
@@ -520,7 +523,9 @@ impl Action {
         });
     }
 
-    pub fn increment_nodes_work_units(&self) {}
+    pub fn increment_nodes_work_units(&self) {
+        self.action_triggered(ActionTriggered::WorkUnitIncremented);
+    }
 
     pub fn store_merge_infos(&self, merge_info: MergeInfo) {
         self.0.borrow_mut().store_merge_infos(merge_info);
@@ -532,10 +537,6 @@ impl Action {
 
     pub fn merge_needed(&self) -> bool {
         self.0.borrow().merge_needed
-    }
-
-    pub fn set_merge_needed(&self, merge_needed: bool) {
-        self.0.borrow_mut().merge_needed = merge_needed;
     }
 }
 
