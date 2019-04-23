@@ -431,3 +431,9 @@ impl ActionTriggered {
         Event::ActionTriggered(self)
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TryResult {
+    Handled,
+    Unhandled,
+}
