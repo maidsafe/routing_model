@@ -18,21 +18,14 @@ use crate::{
 use lazy_static::lazy_static;
 use pretty_assertions::assert_eq;
 
-macro_rules! to_collect {
-    ($($item:expr),*) => {{
-        let mut val = Vec::new();
-        $(
-            let _ = val.push($item.clone());
-        )*
-        val.into_iter().collect()
-    }}
-}
-
 const ATTRIBUTES_1_OLD: Attributes = Attributes { name: 1001, age: 9 };
 const ATTRIBUTES_1: Attributes = Attributes { name: 1, age: 10 };
 
 const ATTRIBUTES_2_OLD: Attributes = Attributes { name: 1002, age: 9 };
 const ATTRIBUTES_2: Attributes = Attributes { name: 2, age: 10 };
+
+const ATTRIBUTES_132_OLD: Attributes = Attributes { name: 132, age: 31 };
+const ATTRIBUTES_132: Attributes = Attributes { name: 132, age: 32 };
 
 const CANDIDATE_1_OLD: Candidate = Candidate(ATTRIBUTES_1_OLD);
 const CANDIDATE_1: Candidate = Candidate(ATTRIBUTES_1);
@@ -55,9 +48,8 @@ const NODE_ELDER_110: Node = Node(Attributes { name: 110, age: 10 });
 const NODE_ELDER_111: Node = Node(Attributes { name: 111, age: 11 });
 const NODE_ELDER_130: Node = Node(Attributes { name: 130, age: 30 });
 const NODE_ELDER_131: Node = Node(Attributes { name: 131, age: 31 });
-const NODE_ELDER_132: Node = Node(Attributes { name: 132, age: 32 });
+const NODE_ELDER_132: Node = Node(ATTRIBUTES_132);
 
-const NAME_109: Name = Name(NODE_ELDER_109.0.name);
 const NAME_110: Name = Name(NODE_ELDER_110.0.name);
 const NAME_111: Name = Name(NODE_ELDER_111.0.name);
 
@@ -80,6 +72,13 @@ const CANDIDATE_RELOCATED_INFO_1: RelocatedInfo = RelocatedInfo {
     section_info: OUR_INITIAL_SECTION_INFO,
 };
 
+const CANDIDATE_RELOCATED_INFO_132: RelocatedInfo = RelocatedInfo {
+    candidate: OUR_NODE_CANDIDATE_OLD,
+    expected_age: Age(OUR_NODE.0.age),
+    target_interval_centre: TARGET_INTERVAL_1,
+    section_info: DST_SECTION_INFO_200,
+};
+
 const CANDIDATE_INFO_VALID_RPC_1: Rpc = Rpc::CandidateInfo(CANDIDATE_INFO_VALID_1);
 const CANDIDATE_INFO_VALID_PARSEC_VOTE_1: ParsecVote =
     ParsecVote::CandidateConnected(CANDIDATE_INFO_VALID_1);
@@ -87,9 +86,11 @@ const TARGET_INTERVAL_1: Name = Name(1234);
 const TARGET_INTERVAL_2: Name = Name(1235);
 
 const OUR_SECTION: Section = Section(0);
-const OUR_NODE: Node = NODE_ELDER_132;
+const OUR_NODE_OLD: Node = Node(ATTRIBUTES_132_OLD);
+const OUR_NODE: Node = Node(ATTRIBUTES_132);
 const OUR_NAME: Name = Name(OUR_NODE.0.name);
-const OUR_NODE_CANDIDATE: Candidate = Candidate(NODE_ELDER_132.0);
+const OUR_NODE_CANDIDATE: Candidate = Candidate(OUR_NODE.0);
+const OUR_NODE_CANDIDATE_OLD: Candidate = Candidate(OUR_NODE_OLD.0);
 const OUR_PROOF_REQUEST: ProofRequest = ProofRequest { value: OUR_NAME.0 };
 const OUR_INITIAL_SECTION_INFO: SectionInfo = SectionInfo(OUR_SECTION, 0);
 const OUR_GENESIS_INFO: GenesisPfxInfo = GenesisPfxInfo(OUR_INITIAL_SECTION_INFO);
@@ -241,7 +242,7 @@ mod dst_tests {
                     )
                     .to_event(),
                     Rpc::RelocateResponse(CANDIDATE_RELOCATED_INFO_1).to_event(),
-                    LocalEvent::CheckResourceProofTimeout.to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::CheckResourceProofTimeout).to_event(),
                 ],
             },
         );
@@ -483,7 +484,8 @@ mod dst_tests {
             &AssertState {
                 action_our_events: vec![
                     NodeChange::Remove(TARGET_INTERVAL_1).to_event(),
-                    LocalEvent::CheckRelocatedNodeConnectionTimeout.to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::CheckRelocatedNodeConnectionTimeout)
+                        .to_event(),
                 ],
             },
         );
@@ -514,7 +516,8 @@ mod dst_tests {
             &AssertState {
                 action_our_events: vec![
                     NodeChange::Remove(TARGET_INTERVAL_1).to_event(),
-                    LocalEvent::CheckRelocatedNodeConnectionTimeout.to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::CheckRelocatedNodeConnectionTimeout)
+                        .to_event(),
                     ActionTriggered::NotYetImplementedErrorTriggered.to_event(),
                 ],
             },
@@ -612,7 +615,7 @@ mod dst_tests {
                         proof: OUR_PROOF_REQUEST,
                     }
                     .to_event(),
-                    LocalEvent::TimeoutAccept.to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::TimeoutAccept).to_event(),
                 ],
             },
         );
@@ -660,7 +663,7 @@ mod dst_tests {
         );
 
         run_test(
-            "Vote candidate online when receiving the end of the proof.",
+            "Vote candidate online when receiving the end of the proof and respond with receipt.",
             &initial_state,
             &[Rpc::ResourceProofResponse {
                 candidate: CANDIDATE_1,
@@ -669,7 +672,14 @@ mod dst_tests {
             }
             .to_event()],
             &AssertState {
-                action_our_events: vec![ParsecVote::Online(CANDIDATE_1).to_event()],
+                action_our_events: vec![
+                    ParsecVote::Online(CANDIDATE_1).to_event(),
+                    Rpc::ResourceProofReceipt {
+                        candidate: CANDIDATE_1,
+                        source: OUR_NAME,
+                    }
+                    .to_event(),
+                ],
             },
         );
     }
@@ -861,8 +871,8 @@ mod dst_tests {
                 action_our_events: vec![
                     SET_ONLINE_NODE_1.to_event(),
                     Rpc::NodeApproval(CANDIDATE_1, OUR_GENESIS_INFO).to_event(),
-                    LocalEvent::CheckResourceProofTimeout.to_event(),
-                    LocalEvent::TimeoutCheckElder.to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::CheckResourceProofTimeout).to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::TimeoutCheckElder).to_event(),
                 ],
             },
         );
@@ -893,7 +903,7 @@ mod dst_tests {
                 action_our_events: vec![
                     SET_ONLINE_NODE_1.to_event(),
                     Rpc::NodeApproval(CANDIDATE_1, OUR_GENESIS_INFO).to_event(),
-                    LocalEvent::CheckResourceProofTimeout.to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::CheckResourceProofTimeout).to_event(),
                     ParsecVote::AddElderNode(NODE_1).to_event(),
                     ParsecVote::RemoveElderNode(NODE_ELDER_109).to_event(),
                     ParsecVote::NewSectionInfo(SECTION_INFO_1).to_event(),
@@ -987,7 +997,7 @@ mod dst_tests {
                     NodeChange::Elder(NODE_1, true).to_event(),
                     NodeChange::Elder(NODE_ELDER_109, false).to_event(),
                     ActionTriggered::OurSectionChanged(SECTION_INFO_1).to_event(),
-                    LocalEvent::TimeoutCheckElder.to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::TimeoutCheckElder).to_event(),
                 ],
             },
         );
@@ -1038,7 +1048,7 @@ mod dst_tests {
                         section_info: OUR_INITIAL_SECTION_INFO,
                     })
                     .to_event(),
-                    LocalEvent::CheckResourceProofTimeout.to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::CheckResourceProofTimeout).to_event(),
                 ],
             },
         );
@@ -1062,7 +1072,7 @@ mod dst_tests {
             &AssertState {
                 action_our_events: vec![
                     REMOVE_NODE_1.to_event(),
-                    LocalEvent::CheckResourceProofTimeout.to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::CheckResourceProofTimeout).to_event(),
                 ],
             },
         );
@@ -1213,7 +1223,7 @@ mod src_tests {
             &AssertState {
                 action_our_events: vec![
                     ParsecVote::WorkUnitIncrement.to_event(),
-                    LocalEvent::TimeoutWorkUnit.to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::TimeoutWorkUnit).to_event(),
                 ],
             },
         );
@@ -1383,7 +1393,7 @@ mod src_tests {
                     NodeChange::Elder(YOUNG_ADULT_205, true).to_event(),
                     NodeChange::Elder(NODE_ELDER_130, false).to_event(),
                     ActionTriggered::OurSectionChanged(SECTION_INFO_1).to_event(),
-                    LocalEvent::TimeoutCheckElder.to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::TimeoutCheckElder).to_event(),
                     Rpc::ExpectCandidate(CANDIDATE_130).to_event(),
                 ],
             },
@@ -1577,13 +1587,12 @@ mod src_tests {
 
 mod node_tests {
     use super::*;
-    use crate::state::JoiningRelocateCandidateState;
     use pretty_assertions::assert_eq;
 
     #[derive(Debug, PartialEq, Default, Clone)]
     struct AssertJoiningState {
         action_our_events: Vec<Event>,
-        join_routine: JoiningRelocateCandidateState,
+        routine_complete_output: Option<GenesisPfxInfo>,
     }
 
     fn run_joining_test(
@@ -1598,7 +1607,7 @@ mod node_tests {
         let final_state = (
             AssertJoiningState {
                 action_our_events: action.our_events,
-                join_routine: final_state.join_routine,
+                routine_complete_output: final_state.join_routine.routine_complete_output,
             },
             final_state.failure,
         );
@@ -1641,7 +1650,7 @@ mod node_tests {
     #[test]
     fn joining_start() {
         let mut initial_state = initial_joining_state_with_dst_200();
-        initial_state.start(DST_SECTION_INFO_200);
+        initial_state.start(CANDIDATE_RELOCATED_INFO_132);
 
         run_joining_test(
             "",
@@ -1649,35 +1658,44 @@ mod node_tests {
             &[],
             &AssertJoiningState {
                 action_our_events: vec![
-                    Rpc::ConnectionInfoRequest {
-                        source: OUR_NAME,
-                        destination: NAME_109,
-                        connection_info: OUR_NAME.0,
-                    }
+                    Rpc::CandidateInfo(CandidateInfo {
+                        old_public_id: OUR_NODE_CANDIDATE_OLD,
+                        new_public_id: OUR_NODE_CANDIDATE,
+                        destination: TARGET_INTERVAL_1,
+                        valid: true,
+                    })
                     .to_event(),
-                    Rpc::ConnectionInfoRequest {
-                        source: OUR_NAME,
-                        destination: NAME_110,
-                        connection_info: OUR_NAME.0,
-                    }
-                    .to_event(),
-                    Rpc::ConnectionInfoRequest {
-                        source: OUR_NAME,
-                        destination: NAME_111,
-                        connection_info: OUR_NAME.0,
-                    }
-                    .to_event(),
-                    LocalEvent::JoiningTimeoutResendCandidateInfo.to_event(),
-                    LocalEvent::JoiningTimeoutRefused.to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutResendInfo).to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutConnectRefused).to_event(),
                 ],
-                join_routine: JoiningRelocateCandidateState {
-                    has_resource_proofs: to_collect![
-                        (NAME_109, (false, None)),
-                        (NAME_110, (false, None)),
-                        (NAME_111, (false, None))
-                    ],
-                    ..JoiningRelocateCandidateState::default()
-                },
+                routine_complete_output: None,
+            },
+        );
+    }
+
+    #[test]
+    fn joining_resend_timeout() {
+        let mut initial_state = initial_joining_state_with_dst_200();
+        initial_state.start(CANDIDATE_RELOCATED_INFO_132);
+
+        let initial_state = arrange_initial_joining_state(&initial_state, &[]);
+
+        run_joining_test(
+            "When not yet connected, resend CandidateInfo.",
+            &initial_state,
+            &[LocalEvent::JoiningTimeoutResendInfo.to_event()],
+            &AssertJoiningState {
+                action_our_events: vec![
+                    Rpc::CandidateInfo(CandidateInfo {
+                        old_public_id: OUR_NODE_CANDIDATE_OLD,
+                        new_public_id: OUR_NODE_CANDIDATE,
+                        destination: TARGET_INTERVAL_1,
+                        valid: true,
+                    })
+                    .to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutResendInfo).to_event(),
+                ],
+                routine_complete_output: None,
             },
         );
     }
@@ -1685,7 +1703,7 @@ mod node_tests {
     #[test]
     fn joining_receive_two_connection_info() {
         let mut initial_state = initial_joining_state_with_dst_200();
-        initial_state.start(DST_SECTION_INFO_200);
+        initial_state.start(CANDIDATE_RELOCATED_INFO_132);
 
         let initial_state = arrange_initial_joining_state(&initial_state, &[]);
 
@@ -1693,13 +1711,13 @@ mod node_tests {
             "",
             &initial_state,
             &[
-                Rpc::ConnectionInfoResponse {
+                Rpc::ConnectionInfoRequest {
                     source: NAME_110,
                     destination: OUR_NAME,
                     connection_info: NAME_110.0,
                 }
                 .to_event(),
-                Rpc::ConnectionInfoResponse {
+                Rpc::ConnectionInfoRequest {
                     source: NAME_111,
                     destination: OUR_NAME,
                     connection_info: NAME_111.0,
@@ -1708,155 +1726,155 @@ mod node_tests {
             ],
             &AssertJoiningState {
                 action_our_events: vec![
-                    Rpc::CandidateInfo(CandidateInfo {
-                        old_public_id: OUR_NODE_CANDIDATE,
-                        new_public_id: OUR_NODE_CANDIDATE,
+                    Rpc::ConnectionInfoResponse {
+                        source: OUR_NAME,
                         destination: NAME_110,
-                        valid: true,
-                    })
+                        connection_info: OUR_NAME.0,
+                    }
                     .to_event(),
-                    Rpc::CandidateInfo(CandidateInfo {
-                        old_public_id: OUR_NODE_CANDIDATE,
-                        new_public_id: OUR_NODE_CANDIDATE,
+                    Rpc::ConnectionInfoResponse {
+                        source: OUR_NAME,
                         destination: NAME_111,
-                        valid: true,
-                    })
+                        connection_info: OUR_NAME.0,
+                    }
                     .to_event(),
                 ],
-                join_routine: JoiningRelocateCandidateState {
-                    has_resource_proofs: to_collect![
-                        (NAME_109, (false, None)),
-                        (NAME_110, (false, None)),
-                        (NAME_111, (false, None))
-                    ],
-                    ..JoiningRelocateCandidateState::default()
-                },
+                routine_complete_output: None,
             },
         );
     }
 
     #[test]
-    fn joining_receive_one_resource_proof() {
+    fn joining_receive_node_connected() {
         let mut initial_state = initial_joining_state_with_dst_200();
-        initial_state.start(DST_SECTION_INFO_200);
+        initial_state.start(CANDIDATE_RELOCATED_INFO_132);
+
+        let initial_state = arrange_initial_joining_state(&initial_state, &[]);
+
+        run_joining_test(
+            "",
+            &initial_state,
+            &[
+                Rpc::NodeConnected(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))
+                    .to_event(),
+            ],
+            &AssertJoiningState {
+                action_our_events: vec![ActionTriggered::Killed(
+                    LocalEvent::JoiningTimeoutConnectRefused,
+                )
+                .to_event()],
+                routine_complete_output: None,
+            },
+        );
+    }
+
+    #[test]
+    fn joining_receive_two_resource_proof() {
+        let mut initial_state = initial_joining_state_with_dst_200();
+        initial_state.start(CANDIDATE_RELOCATED_INFO_132);
 
         let initial_state = arrange_initial_joining_state(
             &initial_state,
             &[
-                Rpc::ConnectionInfoResponse {
-                    source: NAME_110,
-                    destination: OUR_NAME,
-                    connection_info: NAME_110.0,
-                }
-                .to_event(),
-                Rpc::ConnectionInfoResponse {
-                    source: NAME_111,
-                    destination: OUR_NAME,
-                    connection_info: NAME_111.0,
-                }
-                .to_event(),
+                Rpc::NodeConnected(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))
+                    .to_event(),
             ],
         );
 
         run_joining_test(
-            "Start computing resource proof when receiving ResourceProof RPC.",
-            &initial_state,
-            &[Rpc::ResourceProof {
-                candidate: OUR_NODE_CANDIDATE,
-                source: NAME_111,
-                proof: ProofRequest { value: NAME_111.0 },
-            }
-            .to_event()],
-            &AssertJoiningState {
-                action_our_events: vec![LocalEvent::ComputeResourceProofForElder(
-                    NAME_111,
-                    ProofSource(2),
-                )
-                .to_event()],
-                join_routine: JoiningRelocateCandidateState {
-                    has_resource_proofs: to_collect![
-                        (NAME_109, (false, None)),
-                        (NAME_110, (false, None)),
-                        (NAME_111, (true, None))
-                    ],
-                    ..JoiningRelocateCandidateState::default()
-                },
-            },
-        );
-    }
-
-    #[test]
-    fn joining_computed_one_proof_one_proof() {
-        let mut initial_state = initial_joining_state_with_dst_200();
-        initial_state.start(DST_SECTION_INFO_200);
-
-        let initial_state = arrange_initial_joining_state(
+            "Start computing resource proof when receiving ResourceProof RPC and setup timers.",
             &initial_state,
             &[
-                Rpc::ConnectionInfoResponse {
-                    source: NAME_111,
-                    destination: OUR_NAME,
-                    connection_info: NAME_111.0,
-                }
-                .to_event(),
                 Rpc::ResourceProof {
                     candidate: OUR_NODE_CANDIDATE,
                     source: NAME_111,
                     proof: ProofRequest { value: NAME_111.0 },
                 }
                 .to_event(),
+                Rpc::ResourceProof {
+                    candidate: OUR_NODE_CANDIDATE,
+                    source: NAME_110,
+                    proof: ProofRequest { value: NAME_111.0 },
+                }
+                .to_event(),
+            ],
+            &AssertJoiningState {
+                action_our_events: vec![
+                    ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutProofRefused).to_event(),
+                    ActionTriggered::ComputeResourceProofForElder(NAME_111).to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutProofRefused).to_event(),
+                    ActionTriggered::ComputeResourceProofForElder(NAME_110).to_event(),
+                ],
+                routine_complete_output: None,
+            },
+        );
+    }
+
+    #[test]
+    fn joining_computed_two_proofs() {
+        let mut initial_state = initial_joining_state_with_dst_200();
+        initial_state.start(CANDIDATE_RELOCATED_INFO_132);
+
+        let initial_state = arrange_initial_joining_state(
+            &initial_state,
+            &[
+                Rpc::NodeConnected(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))
+                    .to_event(),
             ],
         );
 
         run_joining_test(
             "When proof computed, start sending response to correct Elder.",
             &initial_state,
-            &[LocalEvent::ComputeResourceProofForElder(NAME_111, ProofSource(2)).to_event()],
+            &[
+                TestEvent::SetResourceProof(NAME_111, ProofSource(2)).to_event(),
+                LocalEvent::ResourceProofForElderReady(NAME_111).to_event(),
+                TestEvent::SetResourceProof(NAME_110, ProofSource(2)).to_event(),
+                LocalEvent::ResourceProofForElderReady(NAME_110).to_event(),
+            ],
             &AssertJoiningState {
-                action_our_events: vec![Rpc::ResourceProofResponse {
-                    candidate: OUR_NODE_CANDIDATE,
-                    destination: NAME_111,
-                    proof: Proof::ValidPart,
-                }
-                .to_event()],
-                join_routine: JoiningRelocateCandidateState {
-                    has_resource_proofs: to_collect![
-                        (NAME_109, (false, None)),
-                        (NAME_110, (false, None)),
-                        (NAME_111, (true, Some(ProofSource(1))))
-                    ],
-                    ..JoiningRelocateCandidateState::default()
-                },
+                action_our_events: vec![
+                    Rpc::ResourceProofResponse {
+                        candidate: OUR_NODE_CANDIDATE,
+                        destination: NAME_111,
+                        proof: Proof::ValidPart,
+                    }
+                    .to_event(),
+                    Rpc::ResourceProofResponse {
+                        candidate: OUR_NODE_CANDIDATE,
+                        destination: NAME_110,
+                        proof: Proof::ValidPart,
+                    }
+                    .to_event(),
+                ],
+                routine_complete_output: None,
             },
         );
     }
 
     #[test]
-    fn joining_got_one_proof_receipt() {
+    fn joining_got_part_proof_receipt() {
         let mut initial_state = initial_joining_state_with_dst_200();
-        initial_state.start(DST_SECTION_INFO_200);
+        initial_state.start(CANDIDATE_RELOCATED_INFO_132);
 
         let initial_state = arrange_initial_joining_state(
             &initial_state,
             &[
-                Rpc::ConnectionInfoResponse {
-                    source: NAME_111,
-                    destination: OUR_NAME,
-                    connection_info: NAME_111.0,
-                }
-                .to_event(),
+                Rpc::NodeConnected(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))
+                    .to_event(),
                 Rpc::ResourceProof {
                     candidate: OUR_NODE_CANDIDATE,
                     source: NAME_111,
                     proof: ProofRequest { value: NAME_111.0 },
                 }
                 .to_event(),
-                LocalEvent::ComputeResourceProofForElder(NAME_111, ProofSource(2)).to_event(),
+                TestEvent::SetResourceProof(NAME_111, ProofSource(2)).to_event(),
+                LocalEvent::ResourceProofForElderReady(NAME_111).to_event(),
             ],
         );
 
         run_joining_test(
-            "On receiving receipt, send the next part of the proof to that Elder.",
+            "On receiving receipt, send the next part (end) of the proof to that Elder.",
             &initial_state,
             &[Rpc::ResourceProofReceipt {
                 candidate: OUR_NODE_CANDIDATE,
@@ -1870,75 +1888,98 @@ mod node_tests {
                     proof: Proof::ValidEnd,
                 }
                 .to_event()],
-                join_routine: JoiningRelocateCandidateState {
-                    has_resource_proofs: to_collect![
-                        (NAME_109, (false, None)),
-                        (NAME_110, (false, None)),
-                        (NAME_111, (true, Some(ProofSource(0))))
-                    ],
-                    ..JoiningRelocateCandidateState::default()
-                },
+                routine_complete_output: None,
             },
         );
     }
 
     #[test]
-    fn joining_resend_timeout_after_one_proof() {
+    fn joining_got_end_proof_receipt() {
         let mut initial_state = initial_joining_state_with_dst_200();
-        initial_state.start(DST_SECTION_INFO_200);
+        initial_state.start(CANDIDATE_RELOCATED_INFO_132);
 
         let initial_state = arrange_initial_joining_state(
             &initial_state,
             &[
-                Rpc::ConnectionInfoResponse {
-                    source: NAME_110,
-                    destination: OUR_NAME,
-                    connection_info: NAME_110.0,
-                }
-                .to_event(),
-                Rpc::ConnectionInfoResponse {
-                    source: NAME_111,
-                    destination: OUR_NAME,
-                    connection_info: NAME_111.0,
-                }
-                .to_event(),
+                Rpc::NodeConnected(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))
+                    .to_event(),
                 Rpc::ResourceProof {
                     candidate: OUR_NODE_CANDIDATE,
                     source: NAME_111,
                     proof: ProofRequest { value: NAME_111.0 },
                 }
                 .to_event(),
+                TestEvent::SetResourceProof(NAME_111, ProofSource(2)).to_event(),
+                LocalEvent::ResourceProofForElderReady(NAME_111).to_event(),
+                Rpc::ResourceProofReceipt {
+                    candidate: OUR_NODE_CANDIDATE,
+                    source: NAME_111,
+                }
+                .to_event(),
             ],
         );
 
         run_joining_test(
-            "(out of date with diagram): on time out try to connect again.",
+            "On receiving receipt for end, do not send anymore.",
             &initial_state,
-            &[LocalEvent::JoiningTimeoutResendCandidateInfo.to_event()],
+            &[Rpc::ResourceProofReceipt {
+                candidate: OUR_NODE_CANDIDATE,
+                source: NAME_111,
+            }
+            .to_event()],
+            &AssertJoiningState {
+                action_our_events: vec![],
+                routine_complete_output: None,
+            },
+        );
+    }
+
+    #[test]
+    fn joining_resend_timeout_one_proof_completed_one_in_progress() {
+        let mut initial_state = initial_joining_state_with_dst_200();
+        initial_state.start(CANDIDATE_RELOCATED_INFO_132);
+
+        let initial_state = arrange_initial_joining_state(
+            &initial_state,
+            &[
+                Rpc::NodeConnected(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))
+                    .to_event(),
+                TestEvent::SetResourceProof(NAME_111, ProofSource(2)).to_event(),
+                LocalEvent::ResourceProofForElderReady(NAME_111).to_event(),
+                TestEvent::SetResourceProof(NAME_110, ProofSource(2)).to_event(),
+                LocalEvent::ResourceProofForElderReady(NAME_110).to_event(),
+                Rpc::ResourceProofReceipt {
+                    candidate: OUR_NODE_CANDIDATE,
+                    source: NAME_111,
+                }
+                .to_event(),
+                Rpc::ResourceProofReceipt {
+                    candidate: OUR_NODE_CANDIDATE,
+                    source: NAME_111,
+                }
+                .to_event(),
+            ],
+        );
+
+        run_joining_test(
+            "When connected, resend the incompleted proofs not sent within timeout.",
+            &initial_state,
+            &[
+                LocalEvent::JoiningTimeoutResendInfo.to_event(),
+                LocalEvent::JoiningTimeoutResendInfo.to_event(),
+            ],
             &AssertJoiningState {
                 action_our_events: vec![
-                    Rpc::ConnectionInfoRequest {
-                        source: OUR_NAME,
-                        destination: NAME_109,
-                        connection_info: OUR_NAME.0,
-                    }
-                    .to_event(),
-                    Rpc::ConnectionInfoRequest {
-                        source: OUR_NAME,
+                    ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutResendInfo).to_event(),
+                    Rpc::ResourceProofResponse {
+                        candidate: OUR_NODE_CANDIDATE,
                         destination: NAME_110,
-                        connection_info: OUR_NAME.0,
+                        proof: Proof::ValidPart,
                     }
                     .to_event(),
-                    LocalEvent::JoiningTimeoutResendCandidateInfo.to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutResendInfo).to_event(),
                 ],
-                join_routine: JoiningRelocateCandidateState {
-                    has_resource_proofs: to_collect![
-                        (NAME_109, (false, None)),
-                        (NAME_110, (false, None)),
-                        (NAME_111, (true, None))
-                    ],
-                    ..JoiningRelocateCandidateState::default()
-                },
+                routine_complete_output: None,
             },
         );
     }
@@ -1946,7 +1987,7 @@ mod node_tests {
     #[test]
     fn joining_approved() {
         let mut initial_state = initial_joining_state_with_dst_200();
-        initial_state.start(DST_SECTION_INFO_200);
+        initial_state.start(CANDIDATE_RELOCATED_INFO_132);
 
         let initial_state = arrange_initial_joining_state(&initial_state, &[]);
 
@@ -1958,10 +1999,7 @@ mod node_tests {
                     .to_event(),
             ],
             &AssertJoiningState {
-                join_routine: JoiningRelocateCandidateState {
-                    routine_complete: Some(GenesisPfxInfo(DST_SECTION_INFO_200)),
-                    ..JoiningRelocateCandidateState::default()
-                },
+                routine_complete_output: Some(GenesisPfxInfo(DST_SECTION_INFO_200)),
                 ..AssertJoiningState::default()
             },
         );

@@ -184,7 +184,7 @@ impl Proof {
 pub struct ProofSource(pub i32);
 
 impl ProofSource {
-    pub fn next_part(&mut self) -> Proof {
+    pub fn next_part(&mut self) -> Option<Proof> {
         if self.0 > -1 {
             self.0 -= 1;
         }
@@ -192,13 +192,13 @@ impl ProofSource {
         self.resend()
     }
 
-    fn resend(self) -> Proof {
+    pub fn resend(self) -> Option<Proof> {
         if self.0 > 0 {
-            Proof::ValidPart
+            Some(Proof::ValidPart)
         } else if self.0 == 0 {
-            Proof::ValidEnd
+            Some(Proof::ValidEnd)
         } else {
-            Proof::Invalid
+            None
         }
     }
 }
@@ -303,13 +303,12 @@ impl Rpc {
             | Rpc::RelocateResponse(_)
             | Rpc::RelocatedInfo(_)
             | Rpc::ExpectCandidate(_)
-            | Rpc::NodeConnected(_, _)
-            | Rpc::NodeApproval(_, _)
             | Rpc::Merge => None,
 
-            Rpc::ResourceProof { candidate, .. } | Rpc::ResourceProofReceipt { candidate, .. } => {
-                Some(Name(candidate.0.name))
-            }
+            Rpc::NodeApproval(candidate, _)
+            | Rpc::NodeConnected(candidate, _)
+            | Rpc::ResourceProof { candidate, .. }
+            | Rpc::ResourceProofReceipt { candidate, .. } => Some(Name(candidate.0.name)),
 
             Rpc::ResourceProofResponse { destination, .. }
             | Rpc::CandidateInfo(CandidateInfo { destination, .. })
@@ -388,9 +387,10 @@ pub enum LocalEvent {
     TimeoutCheckRelocate,
 
     TimeoutCheckElder,
-    JoiningTimeoutResendCandidateInfo,
-    JoiningTimeoutRefused,
-    ComputeResourceProofForElder(Name, ProofSource),
+    JoiningTimeoutResendInfo,
+    JoiningTimeoutConnectRefused,
+    JoiningTimeoutProofRefused,
+    ResourceProofForElderReady(Name),
     NodeDetectedOffline(Node),
     NodeDetectedBackOnline(Node),
 }
@@ -406,6 +406,7 @@ pub enum TestEvent {
     SetMergeNeeded(bool),
     SetShortestPrefix(Option<Section>),
     SetWorkUnitEnoughToRelocate(Node),
+    SetResourceProof(Name, ProofSource),
 }
 
 impl TestEvent {
@@ -419,6 +420,11 @@ pub enum ActionTriggered {
     WorkUnitIncremented,
     MergeInfoStored(MergeInfo),
     OurSectionChanged(SectionInfo),
+
+    Scheduled(LocalEvent),
+    Killed(LocalEvent),
+
+    ComputeResourceProofForElder(Name),
 
     // WaitedEvent that should be handled by a flow but are not.
     NotYetImplementedErrorTriggered,

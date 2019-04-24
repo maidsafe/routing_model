@@ -163,8 +163,11 @@ impl MemberState {
 
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct JoiningRelocateCandidateState {
-    pub has_resource_proofs: BTreeMap<Name, (bool, Option<ProofSource>)>,
-    pub routine_complete: Option<GenesisPfxInfo /*output*/>,
+    pub relocated_info: Option<RelocatedInfo>,
+    pub connected: bool,
+    pub need_resend_proofs: BTreeSet<Name>,
+
+    pub routine_complete_output: Option<GenesisPfxInfo /*output*/>,
 }
 
 // The very top level event loop deciding how the sub event loops are processed
@@ -176,9 +179,9 @@ pub struct JoiningState {
 }
 
 impl JoiningState {
-    pub fn start(&mut self, new_section: SectionInfo) {
+    pub fn start(&mut self, relocated_info: RelocatedInfo) {
         self.as_joining_relocate_candidate()
-            .start_event_loop(new_section)
+            .start_event_loop(relocated_info)
     }
 
     pub fn try_next(&mut self, event: Event) -> TryResult {
