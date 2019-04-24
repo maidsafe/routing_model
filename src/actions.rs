@@ -34,6 +34,9 @@ pub struct InnerAction {
 
     pub merge_infos: Option<MergeInfo>,
     pub merge_needed: bool,
+
+    // Proving node:
+    pub resource_proofs_for_elder: BTreeMap<Name, ProofSource>,
 }
 
 impl InnerAction {
@@ -51,6 +54,8 @@ impl InnerAction {
 
             merge_infos: Default::default(),
             merge_needed: false,
+
+            resource_proofs_for_elder: Default::default(),
         }
     }
 
@@ -178,6 +183,13 @@ impl Action {
             TestEvent::SetWorkUnitEnoughToRelocate(node) => {
                 set_enough_work_to_relocate(node.name())
             }
+            TestEvent::SetResourceProof(name, proof) => {
+                let _ = self
+                    .0
+                    .borrow_mut()
+                    .resource_proofs_for_elder
+                    .insert(name, proof);
+            }
         }
     }
 
@@ -190,7 +202,11 @@ impl Action {
     }
 
     pub fn schedule_event(&self, event: LocalEvent) {
-        self.0.borrow_mut().our_events.push(event.to_event());
+        self.action_triggered(ActionTriggered::Scheduled(event));
+    }
+
+    pub fn kill_scheduled_event(&self, event: LocalEvent) {
+        self.action_triggered(ActionTriggered::Killed(event));
     }
 
     pub fn action_triggered(&self, event: ActionTriggered) {
@@ -485,14 +501,32 @@ impl Action {
     }
 
     pub fn start_compute_resource_proof(&self, source: Name, _proof: ProofRequest) {
-        self.schedule_event(LocalEvent::ComputeResourceProofForElder(
-            source,
-            ProofSource(2),
-        ));
+        self.action_triggered(ActionTriggered::ComputeResourceProofForElder(source));
     }
 
-    pub fn get_section_members(&self, section_info: SectionInfo) -> Vec<Node> {
-        self.0.borrow().section_members[&section_info].clone()
+    pub fn get_resource_proof_elders(&self) -> Vec<Name> {
+        self.0
+            .borrow()
+            .resource_proofs_for_elder
+            .keys()
+            .cloned()
+            .collect()
+    }
+
+    pub fn get_next_resource_proof_part(&self, source: Name) -> Option<Proof> {
+        self.0
+            .borrow_mut()
+            .resource_proofs_for_elder
+            .get_mut(&source)
+            .and_then(ProofSource::next_part)
+    }
+
+    pub fn get_resend_resource_proof_part(&self, source: Name) -> Option<Proof> {
+        self.0
+            .borrow_mut()
+            .resource_proofs_for_elder
+            .get_mut(&source)
+            .and_then(|proof_source| proof_source.resend())
     }
 
     pub fn send_connection_info_request(&self, destination: Name) {
@@ -504,12 +538,21 @@ impl Action {
         });
     }
 
-    pub fn send_candidate_info(&self, destination: Name) {
-        let candidate = Candidate(self.0.borrow().our_attributes);
-        self.send_rpc(Rpc::CandidateInfo(CandidateInfo {
-            old_public_id: candidate,
-            new_public_id: candidate,
+    pub fn send_connection_info_response(&self, destination: Name) {
+        let source = self.our_name();
+        self.send_rpc(Rpc::ConnectionInfoResponse {
+            source,
             destination,
+            connection_info: source.0,
+        });
+    }
+
+    pub fn send_candidate_info(&self, relocated_info: RelocatedInfo) {
+        let new_public_id = Candidate(self.0.borrow().our_attributes);
+        self.send_rpc(Rpc::CandidateInfo(CandidateInfo {
+            old_public_id: relocated_info.candidate,
+            new_public_id,
+            destination: relocated_info.target_interval_centre,
             valid: true,
         }));
     }

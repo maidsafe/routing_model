@@ -278,14 +278,11 @@ impl<'a> StartResourceProof<'a> {
         let from_candidate = self.has_candidate() && candidate == self.candidate();
 
         if from_candidate && !self.routine_state().voted_online && proof.is_valid() {
-            match proof {
-                Proof::ValidPart => self.send_resource_proof_receipt_rpc(),
-                Proof::ValidEnd => {
-                    self.set_voted_online(true);
-                    self.vote_parsec_online_candidate();
-                }
-                Proof::Invalid => panic!("Only valid proof"),
+            if proof == Proof::ValidEnd {
+                self.set_voted_online(true);
+                self.vote_parsec_online_candidate();
             }
+            self.send_resource_proof_receipt_rpc();
         } else {
             self.discard()
         }

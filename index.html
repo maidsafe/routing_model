@@ -121,16 +121,63 @@
   This node is going to try to be accepted as candidate until it receives a Rpc::NodeConnected to complete this stage successfully.<br/>
   This node is going to perform the resource proof until it receives a Rpc::NodeApproval to complete this stage successfully.<br/>
   If the node is not accepted, after time out, it will try another section as a new node.
+  <button class="collapsible">TimeoutResendInfo</button>
+  <div class="content">
+      <p>Timeout triggered to resend messages that have been lost: Either Rpc::CandidateInfo or Rpc::ResourceProofResponse
+      </p>
+  </div>
+  <button class="collapsible">TimeoutConnectRefused</button>
+  <div class="content">
+      <p>Timeout to stop trying to connect if so much time has elapsed that we will not be able to succeed.
+      </p>
+  </div>
+  <button class="collapsible">TimeoutProofRefused</button>
+  <div class="content">
+      <p>Timeout to stop trying to resource proof if so much time has elapsed that we will not be able to succeed.
+      </p>
+  </div>
+  <button class="collapsible">get_next_resource_proof_part</button>
+  <div class="content">
+      <p>Return the next part of the resource proof for the given elder.<br/>
+      inputs:<br/>
+          - elder name<br/>
+      </p>
+  </div>
+  <button class="collapsible">get_resend_resource_proof_part</button>
+  <div class="content">
+      <p>Return the last part of the resource proof for the given elder that we sent.<br/>
+      inputs:<br/>
+          - elder name<br/>
+      </p>
+  </div>
+  <button class="collapsible">get_resource_proof_elders</button>
+  <div class="content">
+      <p>Return all the elders we are currently sending resource proofs to.
+      </p>
+  </div>
+  <button class="collapsible">NEED_RESEND_PROOFS</button>
+  <div class="content">
+      <p>Collection of elders we have not sent a ResourceProofResponse during the timeout.
+      </p>
+  </div>
+  <button class="collapsible">CONNECTED</button>
+  <div class="content">
+      <p>Indicate whether we successfully connected, and if so resend Rpc::ResourceProofResponse instead of Rpc::CandidateInfo.
+      </p>
+  </div>
+  <button class="collapsible">RELOCATED_INFO</button>
+  <div class="content">
+      <p>The RelocatedInfo given to the routine and used to send CandidateInfo
+      </p>
+  </div>
   </div>
   <div class="mermaid">
     graph TB
     JoiningRelocateCandidate -->  InitialSendConnectionInfoRequest
-    JoiningRelocateCandidate["JoiningRelocateCandidate<br/>(Take destination section nodes)"]
+    JoiningRelocateCandidate["JoiningRelocateCandidate<br/>(Take RelocatedInfo)"]
     style JoiningRelocateCandidate fill:#f9f,stroke:#333,stroke-width:4px
-    EndRoutine["End of JoiningRelocateCandidate<br/>"]
-    style EndRoutine fill:#f9f,stroke:#333,stroke-width:4px
 
-    InitialSendConnectionInfoRequest["send_rpc(Rpc::CandidateInfo) to target NaeManger<br/><br/>schedule(TimeoutResendInfo)<br/>schedule(TimeoutRefused)"]
+    InitialSendConnectionInfoRequest["RELOCATED_INFO = RelocatedInfo<br/>send_rpc(Rpc::CandidateInfo from RELOCATED_INFO)<br/>to target NaeManger<br/><br/>schedule(TimeoutResendInfo)<br/>schedule(TimeoutConnectRefused)"]
     InitialSendConnectionInfoRequest-->LoopStart
 
     LoopStart --> WaitFor
@@ -138,22 +185,35 @@
     LocalEvent((Local<br/>Event))
     WaitFor --> LocalEvent
 
-    LocalEvent -- ResourceProofForElderReady -->  SendFirstResourceProofPartForElder
-    SendFirstResourceProofPartForElder["send_rpc(<br/>Rpc::ResourceProofResponse)<br/>with first part for elder"]
-    SendFirstResourceProofPartForElder --> LoopEnd
+    LocalEvent -- ResourceProofForElderReady -->  SendNextResourceProofPartForElder
 
-    LocalEvent--"TimeoutResendInfo triggered<br/>CONNECTED==false"--> ResendCandidateInfo
-    ResendCandidateInfo["send_rpc(Rpc::CandidateInfo)<br/><br/>schedule(TimeoutResendInfo)"]
-    ResendCandidateInfo --> LoopEnd
+    LocalEvent--"TimeoutResendInfo triggered"--> CheckResendCandidateInfo
+    CheckResendCandidateInfo((Check))
 
-    LocalEvent--"TimeoutRefused<br/>triggered"--> EndRoutine
+    CheckResendCandidateInfo -- "Otherwise" --> ResendCandidateInfo
+    ResendCandidateInfo["send_rpc(<br/>Rpc::CandidateInfo from RELOCATED_INFO)<br/>to target NaeManger<br/><br/>schedule(<br/>TimeoutResendInfo)"]
+    ResendCandidateInfo --> ScheduleResendTimeoutInfo
+
+    CheckResendCandidateInfo -- "CONNECTED==true" --> ResendProofs
+    ResendProofs["for name in NEED_RESEND_PROOFS:<br/>send_rpc(<br/>Rpc::ResourceProofResponse{<br/>get_resend_resource_proof_part(<br/>name)})<br/><br/>NEED_RESEND_PROOFS=<br/>get_resource_proof_elders()"]
+    ResendProofs --> ScheduleResendTimeoutInfo
+
+    ScheduleResendTimeoutInfo["schedule(<br/>TimeoutResendInfo)"]
+    ScheduleResendTimeoutInfo --> LoopEnd
+
+    SendNextResourceProofPartForElder["NEED_RESEND_PROOFS.remove(<br/>elder name)<br/><br/>send_rpc(<br/>Rpc::ResourceProofResponse{<br/>get_next_resource_proof_part(<br/>elder name)})"]
+    SendNextResourceProofPartForElder --> LoopEnd
+
+    LocalEvent--"TimeoutConnectRefused<br/>or<br/>TimeoutProofRefused<br/>triggered"--> EndRoutine
+    EndRoutine["End of JoiningRelocateCandidate<br/>"]
+    style EndRoutine fill:#f9f,stroke:#333,stroke-width:4px
 
     Rpc((RPC))
     WaitFor --> Rpc
     Rpc -- Rpc::NodeApproval -->  EndRoutine
 
     Rpc -- Rpc::NodeConnected --> NodeConnected
-    NodeConnected["CONNECTED=true<br/><br/>kill_scheduled(TimeoutRefused)"]
+    NodeConnected["kill_scheduled(TimeoutConnectRefused)><br/>CONNECTED=true"]
     NodeConnected-->LoopEnd
 
     Rpc -- Rpc::ConnectionInfoRequest --> OnConnectionInfoRequest
@@ -161,11 +221,9 @@
     OnConnectionInfoRequest-->LoopEnd
 
     Rpc -- Rpc::ResourceProofReceipt -->  SendNextResourceProofPartForElder
-    SendNextResourceProofPartForElder["send_rpc(<br/>Rpc::ResourceProofResponse)<br/>part for elder"]
-    SendNextResourceProofPartForElder --> LoopEnd
 
     Rpc -- Rpc::ResourceProof -->  StartComputeResourceProofForElder
-    StartComputeResourceProofForElder["start_compute_resource_proof(source elder)<br/><br/>schedule(TimeoutRefused)"]
+    StartComputeResourceProofForElder["start_compute_resource_proof(source elder)<br/><br/>schedule(TimeoutProofRefused)"]
     StartComputeResourceProofForElder --> LoopEnd
 
     Rpc -- "Rpc::ExpectCandidate<br/>Rpc::ExpectCandidateRefuseResponse<br/>Rpc::ExpectCandidateAcceptResponse<br/>..." --> VoteParsecRPC
@@ -548,12 +606,12 @@
 
       RPC((RPC))
       WaitFor --RPC--> RPC
-      RPC -- Rpc::ResourceProofResponse<br/>from CANDIDATE<br/><br/>VOTED_ONLINE==no --> ProofResponse((Proof))
+      RPC -- Rpc::ResourceProofResponse<br/>from CANDIDATE --> ProofResponse((Proof))
       ProofResponse((Check))
       SendProofReceipt["send_rpc(<br/>Rpc::ResourceProofReceipt)<br/>for proof"]
-      ProofResponse -- Valid Part --> SendProofReceipt
+      ProofResponse -- "Valid Part or End<br/>otherwise" --> SendProofReceipt
       VoteParsecOnline["vote_for(<br/>Parsec::Online)<br/><br/>VOTED_ONLINE=yes"]
-      ProofResponse -- Valid End --> VoteParsecOnline
+      ProofResponse -- "Valid End<br/>and<br/>VOTED_ONLINE==no" --> VoteParsecOnline
 
 
       DiscardRPC[Discard RPC]
@@ -570,8 +628,8 @@
       VoteParsecCheckResourceProofTimeout --> LoopEnd
 
 
+      VoteParsecOnline --> SendProofReceipt
       SendProofReceipt-->LoopEnd
-      VoteParsecOnline --> LoopEnd
       VoteParsecPurgeCandidate --> LoopEnd
       LoopEnd --> LoopStart
 
