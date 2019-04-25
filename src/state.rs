@@ -7,7 +7,10 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::{actions::*, flows_dst::*, flows_node::*, flows_src::*, utilities::*};
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::{self, Display, Formatter},
+};
 use unwrap::unwrap;
 
 #[derive(Debug, PartialEq, Default, Clone)]
@@ -45,7 +48,7 @@ pub struct StartRelocatedNodeConnectionState {
 pub struct SrcRoutineState {}
 
 // The very top level event loop deciding how the sub event loops are processed
-#[derive(Debug, PartialEq, Default, Clone)]
+#[derive(PartialEq, Default, Clone, Debug)]
 pub struct MemberState {
     pub action: Action,
     pub failure: Option<Event>,
@@ -158,6 +161,75 @@ impl MemberState {
 
     pub fn failure_event(&mut self, event: Event) {
         self.failure = Some(event);
+    }
+}
+
+impl Display for MemberState {
+    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+        let action = self.action.inner();
+        writeln!(formatter, "MemberState {{")?;
+        writeln!(formatter, "    Action {{")?;
+        writeln!(
+            formatter,
+            "        our_attributes: {:?}",
+            action.our_attributes
+        )?;
+        writeln!(formatter, "        our_section: {:?}", action.our_section)?;
+        writeln!(formatter, "        our_current_nodes: {{")?;
+        for node in action.our_current_nodes.values() {
+            writeln!(
+                formatter,
+                "            NodeState {{ {}({:?}), work_units_done: {}, state: {:?} }}",
+                if node.is_elder { "Elder" } else { "Adult" },
+                node.node.0,
+                node.work_units_done,
+                node.state
+            )?;
+        }
+        writeln!(formatter, "        }}")?;
+        writeln!(formatter, "        our_events: {{")?;
+        for event in &action.our_events {
+            writeln!(formatter, "            {:?}", event)?;
+        }
+        writeln!(formatter, "        }}")?;
+        writeln!(
+            formatter,
+            "        shortest_prefix: {:?}",
+            action.shortest_prefix
+        )?;
+        writeln!(
+            formatter,
+            "        section_members: {:?}",
+            action.section_members
+        )?;
+        writeln!(
+            formatter,
+            "        next_target_interval: {:?}",
+            action.next_target_interval
+        )?;
+        writeln!(formatter, "        merge_infos: {:?}", action.merge_infos)?;
+        writeln!(formatter, "        merge_needed: {:?}", action.merge_needed)?;
+        writeln!(
+            formatter,
+            "        resource_proofs_for_elder: {:?}",
+            action.resource_proofs_for_elder
+        )?;
+        writeln!(formatter, "    }}")?;
+        writeln!(formatter, "    failure: {:?}", self.failure)?;
+        writeln!(formatter, "    {:?}", self.start_resource_proof)?;
+        writeln!(
+            formatter,
+            "    {:?}",
+            self.start_relocated_node_connection_state
+        )?;
+        writeln!(formatter, "    {:?}", self.src_routine)?;
+        writeln!(formatter, "    {:?}", self.start_relocate_src)?;
+        writeln!(
+            formatter,
+            "    {:?}",
+            self.check_and_process_elder_change_routine
+        )?;
+        write!(formatter, "}}")
     }
 }
 

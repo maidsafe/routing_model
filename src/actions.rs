@@ -483,6 +483,10 @@ impl Action {
         self.0.borrow().our_attributes.name
     }
 
+    pub fn node_state(&self, name: Name) -> Option<NodeState> {
+        self.0.borrow().our_current_nodes.get(&name).cloned()
+    }
+
     pub fn send_node_approval_rpc(&self, candidate: Candidate) {
         let section = GenesisPfxInfo(self.0.borrow().our_section);
         self.send_rpc(Rpc::NodeApproval(candidate, section));

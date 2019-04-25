@@ -55,6 +55,7 @@ mod actions;
 mod flows_dst;
 mod flows_node;
 mod flows_src;
+mod functional_tests;
 mod scenario_tests;
 mod state;
 mod utilities;

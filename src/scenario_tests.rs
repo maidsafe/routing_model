@@ -1537,7 +1537,7 @@ mod src_tests {
         );
 
         run_test(
-            "Vote for RPC to be proceesed",
+            "Vote for RPC to be processed",
             &initial_state,
             &[
                 Rpc::RelocateResponse(get_relocated_info(CANDIDATE_205, DST_SECTION_INFO_200))
@@ -2066,7 +2066,7 @@ mod node_tests {
         );
 
         run_joining_test(
-            "When connected, resend the incompleted proofs not sent within timeout.",
+            "When connected, resend the incomplete proofs not sent within timeout.",
             &initial_state,
             &[
                 LocalEvent::JoiningTimeoutResendInfo.to_event(),
