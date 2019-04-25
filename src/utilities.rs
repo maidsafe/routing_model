@@ -6,27 +6,22 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Name(pub i32);
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Age(pub i32);
+
+impl Age {
+    pub fn increment_by_one(self) -> Age {
+        Age(self.0 + 1)
+    }
+}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Attributes {
-    pub age: i32,
-    pub name: i32,
-}
-
-impl Attributes {
-    pub fn name(self) -> Name {
-        Name(self.name)
-    }
-
-    #[allow(dead_code)]
-    pub fn age(self) -> Age {
-        Age(self.age)
-    }
+    pub age: Age,
+    pub name: Name,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
@@ -34,16 +29,16 @@ pub struct Candidate(pub Attributes);
 
 impl Candidate {
     pub fn name(self) -> Name {
-        self.0.name()
+        self.0.name
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Node(pub Attributes);
 
 impl Node {
     pub fn name(self) -> Name {
-        self.0.name()
+        self.0.name
     }
 }
 
@@ -129,6 +124,15 @@ pub struct NodeState {
     pub work_units_done: i32,
     pub is_elder: bool,
     pub state: State,
+}
+
+impl NodeState {
+    pub fn default_elder() -> NodeState {
+        NodeState {
+            is_elder: true,
+            ..NodeState::default()
+        }
+    }
 }
 
 impl Default for NodeState {
@@ -309,7 +313,7 @@ impl Rpc {
             Rpc::NodeApproval(candidate, _)
             | Rpc::NodeConnected(candidate, _)
             | Rpc::ResourceProof { candidate, .. }
-            | Rpc::ResourceProofReceipt { candidate, .. } => Some(Name(candidate.0.name)),
+            | Rpc::ResourceProofReceipt { candidate, .. } => Some(candidate.0.name),
 
             Rpc::ResourceProofResponse { destination, .. }
             | Rpc::CandidateInfo(CandidateInfo { destination, .. })
