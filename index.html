@@ -782,11 +782,12 @@
                 n_work_units is a member of the PeerState struct).<br />
             </p>
         </div>
-        <button class="collapsible">nodes_relocating</button>
+        <button class="collapsible">has_relocating_node</button>
         <div class="content">
-            <p>The collection of nodes currently relocating: With node state State::RelocatingAgeIncrease only.<br />
-                It will most often be empty or have one element, unless a merge occurs in which case it may contain more
-                than one element.
+            <p>Returns true if we have any node currently relocating: With node state State::RelocatingAgeIncrease
+                only.<br />
+                There will most often be zero or one such nodes, unless a merge occurs in which case there may be
+                multiple.
                 Nodes coming back online, or needing an extra hop are not considered here.
             </p>
         </div>
@@ -794,8 +795,8 @@
         <div class="content">
             <p>This function will return the best candidate for relocation, if any.<br />
                 First, it will only consider members of our peer_list that have the state: State::Online<br />
-                We use the condition with nodes_relocating() to limit the number of State::Online nodes to relocate to
-                one (except possibly in case of a merge).<br />
+                We use the condition with has_relocating_node() to limit the number of State::Online nodes to relocate
+                to one (except possibly in case of a merge).<br />
                 It can return for instance the node with the largest number of work units for which the number of work
                 units is greater than 2^age.
             </p>
@@ -841,7 +842,7 @@
         AlreadyRelocating(("Check?"))
 
 
-        AlreadyRelocating --"get_node_to_relocate().is_some()<br />and<br />nodes_relocating().is_empty()"-->
+        AlreadyRelocating --"get_node_to_relocate().is_some()<br />and<br />!has_relocating_node()"-->
         SetRelocatingNodeState
         AlreadyRelocating --"Otherwise"--> LoopEnd
 

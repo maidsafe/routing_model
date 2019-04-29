@@ -376,6 +376,14 @@ impl Action {
             .map(|state| Candidate(state.node.0))
     }
 
+    pub fn has_relocating_node(&self) -> bool {
+        self.0
+            .borrow()
+            .our_current_nodes
+            .values()
+            .any(|state| state.state == State::RelocatingAgeIncrease)
+    }
+
     pub fn get_best_relocating_node_and_target(
         &self,
         already_relocating: &BTreeMap<Candidate, i32>,

@@ -1250,6 +1250,27 @@ mod src_tests {
     }
 
     #[test]
+    fn parsec_check_work_unit_increment_has_no_effect_if_relocating_node() {
+        let initial_state = arrange_initial_state(
+            &initial_state_old_elders(),
+            &[
+                TestEvent::SetWorkUnitEnoughToRelocate(YOUNG_ADULT_205).to_event(),
+                ParsecVote::WorkUnitIncrement.to_event(),
+                TestEvent::SetWorkUnitEnoughToRelocate(NODE_ELDER_130).to_event(),
+            ],
+        );
+
+        run_test(
+            "Additional WorkUnitIncrement does not trigger a new relocate if one started",
+            &initial_state,
+            &[ParsecVote::WorkUnitIncrement.to_event()],
+            &AssertState {
+                action_our_events: vec![ActionTriggered::WorkUnitIncremented.to_event()],
+            },
+        );
+    }
+
+    #[test]
     fn parsec_check_relocate_trigger_again_no_retry() {
         let initial_state = arrange_initial_state(
             &initial_state_old_elders(),
