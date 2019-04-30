@@ -56,7 +56,10 @@ impl<'a> TopLevelSrc<'a> {
     }
 
     fn check_get_node_to_relocate(&mut self) {
-        if let (Some(candidate), false) = (self.0.action.get_node_to_relocate(), false) {
+        if self.0.action.has_relocating_node() {
+            return;
+        }
+        if let Some(candidate) = self.0.action.get_node_to_relocate() {
             self.set_relocating_candidate(candidate)
         }
     }
