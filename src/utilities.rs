@@ -103,6 +103,7 @@ impl State {
             || self == State::RelocatingHop
             || self == State::RelocatingBackOnline
     }
+
     pub fn is_resource_proofing(self) -> bool {
         self == State::WaitingProofing
     }

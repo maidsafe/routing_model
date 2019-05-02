@@ -59,11 +59,16 @@ impl InnerAction {
         }
     }
 
-    fn extend_current_nodes(mut self, nodes: &[NodeState]) -> Self {
+    pub fn extend_current_nodes(mut self, nodes: &[NodeState]) -> Self {
+        let expected_count = self.our_current_nodes.len() + nodes.len();
         self.our_current_nodes.extend(
             nodes
                 .iter()
                 .map(|state| (Name(state.node.0.name), state.clone())),
+        );
+        assert!(
+            expected_count == self.our_current_nodes.len(),
+            "Failed to add all nodes."
         );
         self
     }
@@ -372,7 +377,7 @@ impl Action {
             .borrow()
             .our_current_nodes
             .values()
-            .find(|state| !state.state.is_relocating() && state.work_units_done >= state.node.0.age)
+            .find(|state| state.state == State::Online && state.work_units_done >= state.node.0.age)
             .map(|state| Candidate(state.node.0))
     }
 

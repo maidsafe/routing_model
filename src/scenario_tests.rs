@@ -1213,6 +1213,7 @@ mod dst_tests {
 
 mod src_tests {
     use super::*;
+    use itertools::Itertools;
 
     #[test]
     fn local_event_time_out_work_unit() {
@@ -1262,6 +1263,54 @@ mod src_tests {
 
         run_test(
             "Additional WorkUnitIncrement does not trigger a new relocate if one started",
+            &initial_state,
+            &[ParsecVote::WorkUnitIncrement.to_event()],
+            &AssertState {
+                action_our_events: vec![ActionTriggered::WorkUnitIncremented.to_event()],
+            },
+        );
+    }
+
+    #[test]
+    fn parsec_check_get_node_to_relocate_uses_online_nodes_only() {
+        let mut all_non_online_states = vec![
+            State::RelocatingAgeIncrease,
+            State::RelocatingHop,
+            State::RelocatingBackOnline,
+            State::Relocated(get_relocated_info(CANDIDATE_1_OLD, SECTION_INFO_1)),
+            State::WaitingCandidateInfo(get_relocated_info(CANDIDATE_2_OLD, SECTION_INFO_2)),
+            State::WaitingProofing,
+            State::Offline,
+        ];
+
+        let age = CANDIDATE_1_OLD.0.age;
+        let states_with_enough_work_units = all_non_online_states
+            .drain(..)
+            .enumerate()
+            .map(|(name_increment, state)| {
+                let node = Node(Attributes {
+                    name: 1000 + name_increment as i32,
+                    age,
+                });
+                NodeState {
+                    node,
+                    is_elder: false,
+                    work_units_done: age,
+                    state,
+                }
+            })
+            .collect_vec();
+        let inner_action = INNER_ACTION_YOUNG_ELDERS
+            .clone()
+            .extend_current_nodes(&states_with_enough_work_units);
+
+        let initial_state = MemberState {
+            action: Action::new(inner_action),
+            ..Default::default()
+        };
+
+        run_test(
+            "Check get_node_to_relocate doesn't choose anything but 'Online' nodes",
             &initial_state,
             &[ParsecVote::WorkUnitIncrement.to_event()],
             &AssertState {
