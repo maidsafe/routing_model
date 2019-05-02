@@ -417,10 +417,9 @@ impl<'a> StartResourceProof<'a> {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct CheckAndProcessElderChange<'a>(pub &'a mut MemberState);
+pub struct StartMergeSplitAndChangeElders<'a>(pub &'a mut MemberState);
 
-// CheckAndProcessElderChange Sub Routine
-impl<'a> CheckAndProcessElderChange<'a> {
+impl<'a> StartMergeSplitAndChangeElders<'a> {
     // TODO - remove the `allow` once we have a test for this method.
     #[allow(dead_code)]
     fn start_event_loop(&mut self) {
@@ -531,7 +530,7 @@ impl<'a> ProcessElderChange<'a> {
         self.mut_routine_state().is_active = false;
         self.mut_routine_state().change_elder = None;
         self.0
-            .as_check_and_process_elder_change()
+            .as_start_merge_split_and_change_elders()
             .transition_exit_process_elder_change()
     }
 
@@ -570,14 +569,14 @@ impl<'a> ProcessElderChange<'a> {
     fn routine_state(&self) -> &ProcessElderChangeState {
         &self
             .0
-            .check_and_process_elder_change_routine
+            .start_merge_split_and_change_elders
             .sub_routine_process_elder_change
     }
 
     fn mut_routine_state(&mut self) -> &mut ProcessElderChangeState {
         &mut self
             .0
-            .check_and_process_elder_change_routine
+            .start_merge_split_and_change_elders
             .sub_routine_process_elder_change
     }
 

@@ -21,7 +21,7 @@ pub struct ProcessElderChangeState {
 }
 
 #[derive(Debug, PartialEq, Default, Clone)]
-pub struct CheckAndProcessElderChangeState {
+pub struct StartMergeSplitAndChangeEldersState {
     pub sub_routine_process_elder_change: ProcessElderChangeState,
 }
 
@@ -56,7 +56,7 @@ pub struct MemberState {
     pub start_relocated_node_connection_state: StartRelocatedNodeConnectionState,
     pub src_routine: SrcRoutineState,
     pub start_relocate_src: StartRelocateSrcState,
-    pub check_and_process_elder_change_routine: CheckAndProcessElderChangeState,
+    pub start_merge_split_and_change_elders: StartMergeSplitAndChangeEldersState,
 }
 
 impl MemberState {
@@ -68,12 +68,15 @@ impl MemberState {
 
         let event = unwrap!(event.to_waited_event());
 
-        if let TryResult::Handled = self.as_check_and_process_elder_change().try_next(event) {
+        if let TryResult::Handled = self
+            .as_start_merge_split_and_change_elders()
+            .try_next(event)
+        {
             return TryResult::Handled;
         }
 
         if self
-            .check_and_process_elder_change_routine
+            .start_merge_split_and_change_elders
             .sub_routine_process_elder_change
             .is_active
         {
@@ -139,8 +142,8 @@ impl MemberState {
         StartResourceProof(self)
     }
 
-    pub fn as_check_and_process_elder_change(&mut self) -> CheckAndProcessElderChange {
-        CheckAndProcessElderChange(self)
+    pub fn as_start_merge_split_and_change_elders(&mut self) -> StartMergeSplitAndChangeElders {
+        StartMergeSplitAndChangeElders(self)
     }
 
     pub fn as_check_online_offline(&mut self) -> CheckOnlineOffline {
@@ -227,7 +230,7 @@ impl Display for MemberState {
         writeln!(
             formatter,
             "    {:?}",
-            self.check_and_process_elder_change_routine
+            self.start_merge_split_and_change_elders
         )?;
         write!(formatter, "}}")
     }

@@ -1099,10 +1099,10 @@
     </div>
     <div class="mermaid">
         graph TB
-        CheckAndProcessElderChange["StartMergeSplitAndChangeElders:<br />No exit - Needs killed"]
-        style CheckAndProcessElderChange fill:#f9f,stroke:#333,stroke-width:4px
+        StartMergeSplitAndChangeElders["StartMergeSplitAndChangeElders:<br />No exit - Needs killed"]
+        style StartMergeSplitAndChangeElders fill:#f9f,stroke:#333,stroke-width:4px
 
-        CheckAndProcessElderChange --> StartCheckElderTimeout
+        StartMergeSplitAndChangeElders --> StartCheckElderTimeout
         StartCheckElderTimeout["schedule(<br />CheckElderTimeout)"]
         StartCheckElderTimeout --> LoopStart
 
