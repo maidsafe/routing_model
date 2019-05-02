@@ -208,7 +208,7 @@ impl Distribution<SectionInfo> for Standard {
 pub struct GenesisPfxInfo(pub SectionInfo);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Ord, Eq)]
-pub struct MergeInfo;
+pub struct MergeInfo(pub SectionInfo);
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Ord, Eq)]
 pub enum ChurnNeeded {
@@ -352,7 +352,7 @@ pub enum Rpc {
         connection_info: i32,
     },
 
-    Merge,
+    Merge(SectionInfo),
     Split,
 }
 
@@ -367,7 +367,7 @@ impl Rpc {
             | Rpc::RelocateResponse(_)
             | Rpc::RelocatedInfo(_)
             | Rpc::ExpectCandidate(_)
-            | Rpc::Merge
+            | Rpc::Merge(_)
             | Rpc::Split => None,
 
             Rpc::NodeApproval(candidate, _)
@@ -485,6 +485,8 @@ pub enum ActionTriggered {
     WorkUnitIncremented,
     MergeInfoStored(MergeInfo),
     OurSectionChanged(SectionInfo),
+
+    CompleteMerge,
 
     Scheduled(LocalEvent),
     Killed(LocalEvent),

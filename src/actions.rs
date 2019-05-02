@@ -150,6 +150,11 @@ impl InnerAction {
         self.our_events
             .push(ActionTriggered::MergeInfoStored(merge_info).to_event());
     }
+
+    fn complete_merge(&mut self) {
+        self.our_events
+            .push(ActionTriggered::CompleteMerge.to_event());
+    }
 }
 
 #[derive(Clone)]
@@ -489,6 +494,10 @@ impl Action {
         self.0.borrow().our_current_nodes.get(&name).cloned()
     }
 
+    pub fn our_section(&self) -> SectionInfo {
+        self.0.borrow().our_section
+    }
+
     pub fn send_node_approval_rpc(&self, candidate: Candidate) {
         let section = GenesisPfxInfo(self.0.borrow().our_section);
         self.send_rpc(Rpc::NodeApproval(candidate, section));
@@ -608,6 +617,28 @@ impl Action {
             .borrow()
             .churn_needed
             .map_or(false, |v| v == ChurnNeeded::Split)
+    }
+
+    pub fn complete_merge(&self) {
+        self.0.borrow_mut().complete_merge()
+    }
+
+    pub fn has_sibling_merge_info(&self) -> bool {
+        match self.0.borrow().merge_infos {
+            Some(merge_info) => {
+                let our_section = self.our_section().0;
+                let their_section = (merge_info.0).0;
+                (our_section.0 - their_section.0).abs() == 1
+            }
+            None => false,
+        }
+    }
+
+    pub fn merge_sibling_info_to_new_section(&self) -> SectionInfo {
+        let our_section = self.our_section();
+        let their_section = self.0.borrow_mut().merge_infos.take();
+        let their_section = their_section.expect("Merge infos missing").0;
+        SectionInfo(Section((our_section.0).0 + ((their_section).0).0 + 1), 0)
     }
 }
 

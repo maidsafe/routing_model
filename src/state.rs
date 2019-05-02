@@ -23,6 +23,7 @@ pub struct ProcessElderChangeState {
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct StartMergeSplitAndChangeEldersState {
     pub sub_routine_process_elder_change: ProcessElderChangeState,
+    pub sub_routine_process_merge_active: bool,
 }
 
 #[derive(Debug, PartialEq, Default, Clone)]
@@ -64,11 +65,13 @@ impl MemberState {
 
         let event = unwrap!(event.to_waited_event());
 
-        if let TryResult::Handled = self
-            .as_start_merge_split_and_change_elders()
-            .try_next(event)
+        if self
+            .start_merge_split_and_change_elders
+            .sub_routine_process_merge_active
         {
-            return TryResult::Handled;
+            if let TryResult::Handled = self.as_process_merge().try_next(event) {
+                return TryResult::Handled;
+            }
         }
 
         if self
@@ -79,6 +82,13 @@ impl MemberState {
             if let TryResult::Handled = self.as_process_elder_change().try_next(event) {
                 return TryResult::Handled;
             }
+        }
+
+        if let TryResult::Handled = self
+            .as_start_merge_split_and_change_elders()
+            .try_next(event)
+        {
+            return TryResult::Handled;
         }
 
         if let TryResult::Handled = self.as_check_online_offline().try_next(event) {
@@ -152,6 +162,10 @@ impl MemberState {
 
     pub fn as_start_relocate_src(&mut self) -> StartRelocateSrc {
         StartRelocateSrc(self)
+    }
+
+    pub fn as_process_merge(&mut self) -> ProcessMerge {
+        ProcessMerge(self)
     }
 
     pub fn as_process_elder_change(&mut self) -> ProcessElderChange {
