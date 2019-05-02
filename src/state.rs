@@ -93,7 +93,7 @@ impl MemberState {
             return TryResult::Handled;
         }
 
-        if let TryResult::Handled = self.as_top_level_src().try_next(event) {
+        if let TryResult::Handled = self.as_start_decides_on_node_to_relocate().try_next(event) {
             return TryResult::Handled;
         }
 
@@ -150,8 +150,8 @@ impl MemberState {
         CheckOnlineOffline(self)
     }
 
-    pub fn as_top_level_src(&mut self) -> TopLevelSrc {
-        TopLevelSrc(self)
+    pub fn as_start_decides_on_node_to_relocate(&mut self) -> StartDecidesOnNodeToRelocate {
+        StartDecidesOnNodeToRelocate(self)
     }
 
     pub fn as_start_relocate_src(&mut self) -> StartRelocateSrc {

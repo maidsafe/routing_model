@@ -13,9 +13,9 @@ use crate::{
 use unwrap::unwrap;
 
 #[derive(Debug, PartialEq)]
-pub struct TopLevelSrc<'a>(pub &'a mut MemberState);
+pub struct StartDecidesOnNodeToRelocate<'a>(pub &'a mut MemberState);
 
-impl<'a> TopLevelSrc<'a> {
+impl<'a> StartDecidesOnNodeToRelocate<'a> {
     // TODO - remove the `allow` once we have a test for this method.
     #[allow(dead_code)]
     fn start_event_loop(&mut self) {
