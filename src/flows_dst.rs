@@ -509,6 +509,8 @@ impl<'a> StartMergeSplitAndChangeElders<'a> {
     }
 
     fn transition_exit_process_elder_change(&mut self) {
+        // TODO: ResourceProof_Cancel
+        // TODO: RelocatedNodeConnection_Reset
         self.start_check_elder_timeout()
     }
 
