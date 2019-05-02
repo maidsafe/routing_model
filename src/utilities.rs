@@ -210,6 +210,12 @@ pub struct GenesisPfxInfo(pub SectionInfo);
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Ord, Eq)]
 pub struct MergeInfo;
 
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Ord, Eq)]
+pub enum ChurnNeeded {
+    Split,
+    Merge,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChangeElder {
     pub changes: Vec<(Node, bool)>,
@@ -347,6 +353,7 @@ pub enum Rpc {
     },
 
     Merge,
+    Split,
 }
 
 impl Rpc {
@@ -360,7 +367,8 @@ impl Rpc {
             | Rpc::RelocateResponse(_)
             | Rpc::RelocatedInfo(_)
             | Rpc::ExpectCandidate(_)
-            | Rpc::Merge => None,
+            | Rpc::Merge
+            | Rpc::Split => None,
 
             Rpc::NodeApproval(candidate, _)
             | Rpc::NodeConnected(candidate, _)
@@ -460,7 +468,7 @@ impl LocalEvent {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TestEvent {
-    SetMergeNeeded(bool),
+    SetChurnNeeded(ChurnNeeded),
     SetShortestPrefix(Option<Section>),
     SetWorkUnitEnoughToRelocate(Node),
     SetResourceProof(Name, ProofSource),

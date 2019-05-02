@@ -211,7 +211,7 @@ impl Display for MemberState {
             action.next_target_interval
         )?;
         writeln!(formatter, "        merge_infos: {:?}", action.merge_infos)?;
-        writeln!(formatter, "        merge_needed: {:?}", action.merge_needed)?;
+        writeln!(formatter, "        churn_needed: {:?}", action.churn_needed)?;
         writeln!(
             formatter,
             "        resource_proofs_for_elder: {:?}",

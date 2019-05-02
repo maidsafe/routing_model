@@ -475,6 +475,10 @@ impl<'a> StartMergeSplitAndChangeElders<'a> {
         self.0.action.has_merge_infos()
     }
 
+    fn split_needed(&self) -> bool {
+        self.0.action.split_needed()
+    }
+
     fn check_merge(&mut self) {
         if self.has_merge_infos() || self.merge_needed() {
             // TODO: -> Concurrent to ProcessMerge
@@ -487,7 +491,14 @@ impl<'a> StartMergeSplitAndChangeElders<'a> {
     fn check_elder(&mut self) {
         match self.0.action.check_elder() {
             Some(change_elder) => self.concurrent_transition_to_process_elder_change(change_elder),
-            None => self.start_check_elder_timeout(),
+            None => {
+                if self.split_needed() {
+                    // TODO: -> Concurrent to ProcessSplit
+                    self.0.action.send_rpc(Rpc::Split);
+                } else {
+                    self.start_check_elder_timeout();
+                }
+            }
         }
     }
 

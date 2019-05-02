@@ -7,9 +7,9 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::utilities::{
-    ActionTriggered, Attributes, Candidate, CandidateInfo, ChangeElder, Event, GenesisPfxInfo,
-    LocalEvent, MergeInfo, Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest,
-    ProofSource, RelocatedInfo, Rpc, Section, SectionInfo, State, TestEvent,
+    ActionTriggered, Attributes, Candidate, CandidateInfo, ChangeElder, ChurnNeeded, Event,
+    GenesisPfxInfo, LocalEvent, MergeInfo, Name, Node, NodeChange, NodeState, ParsecVote, Proof,
+    ProofRequest, ProofSource, RelocatedInfo, Rpc, Section, SectionInfo, State, TestEvent,
 };
 use itertools::Itertools;
 use std::{
@@ -33,7 +33,7 @@ pub struct InnerAction {
     pub next_target_interval: Name,
 
     pub merge_infos: Option<MergeInfo>,
-    pub merge_needed: bool,
+    pub churn_needed: Option<ChurnNeeded>,
 
     // Proving node:
     pub resource_proofs_for_elder: BTreeMap<Name, ProofSource>,
@@ -53,7 +53,7 @@ impl InnerAction {
             next_target_interval: Name(0),
 
             merge_infos: Default::default(),
-            merge_needed: false,
+            churn_needed: Default::default(),
 
             resource_proofs_for_elder: Default::default(),
         }
@@ -180,7 +180,9 @@ impl Action {
         };
 
         match event {
-            TestEvent::SetMergeNeeded(value) => self.0.borrow_mut().merge_needed = value,
+            TestEvent::SetChurnNeeded(churn_needed) => {
+                self.0.borrow_mut().churn_needed = Some(churn_needed)
+            }
             TestEvent::SetShortestPrefix(value) => self.0.borrow_mut().shortest_prefix = value,
             TestEvent::SetWorkUnitEnoughToRelocate(node) => {
                 set_enough_work_to_relocate(node.name())
@@ -595,7 +597,17 @@ impl Action {
     }
 
     pub fn merge_needed(&self) -> bool {
-        self.0.borrow().merge_needed
+        self.0
+            .borrow()
+            .churn_needed
+            .map_or(false, |v| v == ChurnNeeded::Merge)
+    }
+
+    pub fn split_needed(&self) -> bool {
+        self.0
+            .borrow()
+            .churn_needed
+            .map_or(false, |v| v == ChurnNeeded::Split)
     }
 }
 
