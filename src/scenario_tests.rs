@@ -18,21 +18,45 @@ use crate::{
 use lazy_static::lazy_static;
 use pretty_assertions::assert_eq;
 
-const ATTRIBUTES_1_OLD: Attributes = Attributes { name: 1001, age: 9 };
-const ATTRIBUTES_1: Attributes = Attributes { name: 1, age: 10 };
+const ATTRIBUTES_1_OLD: Attributes = Attributes {
+    name: Name(1001),
+    age: Age(9),
+};
+const ATTRIBUTES_1: Attributes = Attributes {
+    name: Name(1),
+    age: Age(10),
+};
 
-const ATTRIBUTES_2_OLD: Attributes = Attributes { name: 1002, age: 9 };
-const ATTRIBUTES_2: Attributes = Attributes { name: 2, age: 10 };
+const ATTRIBUTES_2_OLD: Attributes = Attributes {
+    name: Name(1002),
+    age: Age(9),
+};
+const ATTRIBUTES_2: Attributes = Attributes {
+    name: Name(2),
+    age: Age(10),
+};
 
-const ATTRIBUTES_132_OLD: Attributes = Attributes { name: 132, age: 31 };
-const ATTRIBUTES_132: Attributes = Attributes { name: 132, age: 32 };
+const ATTRIBUTES_132_OLD: Attributes = Attributes {
+    name: Name(132),
+    age: Age(31),
+};
+const ATTRIBUTES_132: Attributes = Attributes {
+    name: Name(132),
+    age: Age(32),
+};
 
 const CANDIDATE_1_OLD: Candidate = Candidate(ATTRIBUTES_1_OLD);
 const CANDIDATE_1: Candidate = Candidate(ATTRIBUTES_1);
 const CANDIDATE_2_OLD: Candidate = Candidate(ATTRIBUTES_2_OLD);
 const CANDIDATE_2: Candidate = Candidate(ATTRIBUTES_2);
-const CANDIDATE_130: Candidate = Candidate(Attributes { name: 130, age: 30 });
-const CANDIDATE_205: Candidate = Candidate(Attributes { name: 205, age: 5 });
+const CANDIDATE_130: Candidate = Candidate(Attributes {
+    name: Name(130),
+    age: Age(30),
+});
+const CANDIDATE_205: Candidate = Candidate(Attributes {
+    name: Name(205),
+    age: Age(5),
+});
 const OTHER_SECTION_1: Section = Section(1);
 const DST_SECTION_200: Section = Section(200);
 
@@ -41,19 +65,37 @@ const NODE_1: Node = Node(ATTRIBUTES_1);
 const NODE_2_OLD: Node = Node(ATTRIBUTES_2_OLD);
 const NODE_2: Node = Node(ATTRIBUTES_2);
 const SET_ONLINE_NODE_1: NodeChange = NodeChange::State(Node(ATTRIBUTES_1), State::Online);
-const REMOVE_NODE_1: NodeChange = NodeChange::Remove(Name(ATTRIBUTES_1.name));
+const REMOVE_NODE_1: NodeChange = NodeChange::Remove(ATTRIBUTES_1.name);
 
-const NODE_ELDER_109: Node = Node(Attributes { name: 109, age: 9 });
-const NODE_ELDER_110: Node = Node(Attributes { name: 110, age: 10 });
-const NODE_ELDER_111: Node = Node(Attributes { name: 111, age: 11 });
-const NODE_ELDER_130: Node = Node(Attributes { name: 130, age: 30 });
-const NODE_ELDER_131: Node = Node(Attributes { name: 131, age: 31 });
+const NODE_ELDER_109: Node = Node(Attributes {
+    name: Name(109),
+    age: Age(9),
+});
+const NODE_ELDER_110: Node = Node(Attributes {
+    name: Name(110),
+    age: Age(10),
+});
+const NODE_ELDER_111: Node = Node(Attributes {
+    name: Name(111),
+    age: Age(11),
+});
+const NODE_ELDER_130: Node = Node(Attributes {
+    name: Name(130),
+    age: Age(30),
+});
+const NODE_ELDER_131: Node = Node(Attributes {
+    name: Name(131),
+    age: Age(31),
+});
 const NODE_ELDER_132: Node = Node(ATTRIBUTES_132);
 
-const NAME_110: Name = Name(NODE_ELDER_110.0.name);
-const NAME_111: Name = Name(NODE_ELDER_111.0.name);
+const NAME_110: Name = NODE_ELDER_110.0.name;
+const NAME_111: Name = NODE_ELDER_111.0.name;
 
-const YOUNG_ADULT_205: Node = Node(Attributes { name: 205, age: 5 });
+const YOUNG_ADULT_205: Node = Node(Attributes {
+    name: Name(205),
+    age: Age(5),
+});
 const SECTION_INFO_1: SectionInfo = SectionInfo(OUR_SECTION, 1);
 const SECTION_INFO_2: SectionInfo = SectionInfo(OUR_SECTION, 2);
 const DST_SECTION_INFO_200: SectionInfo = SectionInfo(DST_SECTION_200, 0);
@@ -67,14 +109,14 @@ const CANDIDATE_INFO_VALID_1: CandidateInfo = CandidateInfo {
 
 const CANDIDATE_RELOCATED_INFO_1: RelocatedInfo = RelocatedInfo {
     candidate: CANDIDATE_1_OLD,
-    expected_age: Age(CANDIDATE_1_OLD.0.age + 1),
+    expected_age: Age(CANDIDATE_1_OLD.0.age.0 + 1),
     target_interval_centre: TARGET_INTERVAL_1,
     section_info: OUR_INITIAL_SECTION_INFO,
 };
 
 const CANDIDATE_RELOCATED_INFO_132: RelocatedInfo = RelocatedInfo {
     candidate: OUR_NODE_CANDIDATE_OLD,
-    expected_age: Age(OUR_NODE.0.age),
+    expected_age: OUR_NODE.0.age,
     target_interval_centre: TARGET_INTERVAL_1,
     section_info: DST_SECTION_INFO_200,
 };
@@ -88,7 +130,7 @@ const TARGET_INTERVAL_2: Name = Name(1235);
 const OUR_SECTION: Section = Section(0);
 const OUR_NODE_OLD: Node = Node(ATTRIBUTES_132_OLD);
 const OUR_NODE: Node = Node(ATTRIBUTES_132);
-const OUR_NAME: Name = Name(OUR_NODE.0.name);
+const OUR_NAME: Name = OUR_NODE.0.name;
 const OUR_NODE_CANDIDATE: Candidate = Candidate(OUR_NODE.0);
 const OUR_NODE_CANDIDATE_OLD: Candidate = Candidate(OUR_NODE_OLD.0);
 const OUR_PROOF_REQUEST: ProofRequest = ProofRequest { value: OUR_NAME.0 };
@@ -101,30 +143,21 @@ lazy_static! {
     static ref INNER_ACTION_YOUNG_ELDERS: InnerAction = INNER_ACTION_132
         .clone()
         .extend_current_nodes_with(
-            &NodeState {
-                is_elder: true,
-                ..NodeState::default()
-            },
+            &NodeState::default_elder(),
             &[NODE_ELDER_109, NODE_ELDER_110, NODE_ELDER_132]
         )
         .extend_current_nodes_with(&NodeState::default(), &[YOUNG_ADULT_205]);
     static ref INNER_ACTION_OLD_ELDERS: InnerAction = INNER_ACTION_132
         .clone()
         .extend_current_nodes_with(
-            &NodeState {
-                is_elder: true,
-                ..NodeState::default()
-            },
+            &NodeState::default_elder(),
             &[NODE_ELDER_130, NODE_ELDER_131, NODE_ELDER_132]
         )
         .extend_current_nodes_with(&NodeState::default(), &[YOUNG_ADULT_205]);
     static ref INNER_ACTION_YOUNG_ELDERS_WITH_WAITING_ELDER: InnerAction = INNER_ACTION_132
         .clone()
         .extend_current_nodes_with(
-            &NodeState {
-                is_elder: true,
-                ..NodeState::default()
-            },
+            &NodeState::default_elder(),
             &[NODE_ELDER_109, NODE_ELDER_110, NODE_ELDER_111]
         )
         .extend_current_nodes_with(&NodeState::default(), &[NODE_ELDER_130]);
@@ -197,7 +230,7 @@ fn initial_state_old_elders() -> MemberState {
 fn get_relocated_info(candidate: Candidate, section_info: SectionInfo) -> RelocatedInfo {
     RelocatedInfo {
         candidate,
-        expected_age: Age(candidate.0.age + 1),
+        expected_age: candidate.0.age.increment_by_one(),
         target_interval_centre: TARGET_INTERVAL_1,
         section_info,
     }
@@ -235,7 +268,7 @@ mod dst_tests {
                 action_our_events: vec![
                     NodeChange::AddWithState(
                         Node(Attributes {
-                            name: TARGET_INTERVAL_1.0,
+                            name: TARGET_INTERVAL_1,
                             age: CANDIDATE_1.0.age,
                         }),
                         State::WaitingCandidateInfo(CANDIDATE_RELOCATED_INFO_1),
@@ -412,8 +445,9 @@ mod dst_tests {
         );
 
         let description =
-        "Relocate candidate immediately when a section with shorter prefix exists.\
-        Still refuse new candidate until current candidates processing is complete, including relocation.";
+            "Relocate candidate immediately when a section with shorter prefix exists. \
+             Still refuse new candidate until current candidates processing is complete, including \
+             relocation.";
         run_test(
             description,
             &initial_state,
@@ -774,8 +808,8 @@ mod dst_tests {
         );
 
         let description =
-            "Ignore parsec votes not for the current candidate.\
-             The previous running resource proof for CANDIDATE_2 may have been cancelled,\
+            "Ignore parsec votes not for the current candidate. \
+             The previous running resource proof for CANDIDATE_2 may have been cancelled, \
              or we would only see either of the votes later on.";
         run_test(
             description,
@@ -858,7 +892,7 @@ mod dst_tests {
         );
 
         let description =
-            "Accept a new node (No Elder Change): send RPC and schedule next ResourceProof.\
+            "Accept a new node (No Elder Change): send RPC and schedule next ResourceProof. \
              CheckElder has no work.";
         run_test(
             description,
@@ -890,7 +924,7 @@ mod dst_tests {
         );
 
         let description =
-            "Accept a new node (Elder Change): send RPC and schedule next ResourceProof.\
+            "Accept a new node (Elder Change): send RPC and schedule next ResourceProof. \
              CheckElder start updating the section when triggered.";
         run_test(
             description,
@@ -925,7 +959,7 @@ mod dst_tests {
             ],
         );
 
-        let description = "Accept a new node (Elder Change) - Check Elder Triggered.\
+        let description = "Accept a new node (Elder Change) - Check Elder Triggered. \
                            Error if consensus unexpected votes.";
         run_test(
             description,
@@ -958,7 +992,7 @@ mod dst_tests {
             ],
         );
 
-        let description = "Accept a new node (Elder Change) - Check Elder Triggered.\
+        let description = "Accept a new node (Elder Change) - Check Elder Triggered. \
                            Nothing change until all expected votes have happened.";
         run_test(
             description,
@@ -983,7 +1017,7 @@ mod dst_tests {
         );
 
         let description =
-            "Accept a new node (Elder Change) - Check Elder Triggered and votes completed.\
+            "Accept a new node (Elder Change) - Check Elder Triggered and votes completed. \
              Once completed, update our section and elders";
         run_test(
             description,
@@ -1017,7 +1051,7 @@ mod dst_tests {
         );
 
         let description =
-            "Accept new candidate even if elder where changed by first candidate joining.\
+            "Accept new candidate even if elder where changed by first candidate joining. \
              Use old section as new one not yet consensused.";
         run_test(
             description,
@@ -1030,12 +1064,12 @@ mod dst_tests {
                 action_our_events: vec![
                     NodeChange::AddWithState(
                         Node(Attributes {
-                            name: TARGET_INTERVAL_2.0,
+                            name: TARGET_INTERVAL_2,
                             age: CANDIDATE_2.0.age,
                         }),
                         State::WaitingCandidateInfo(RelocatedInfo {
                             candidate: CANDIDATE_2_OLD,
-                            expected_age: CANDIDATE_2.0.age(),
+                            expected_age: CANDIDATE_2.0.age,
                             target_interval_centre: TARGET_INTERVAL_2,
                             section_info: OUR_INITIAL_SECTION_INFO,
                         }),
@@ -1043,7 +1077,7 @@ mod dst_tests {
                     .to_event(),
                     Rpc::RelocateResponse(RelocatedInfo {
                         candidate: CANDIDATE_2_OLD,
-                        expected_age: CANDIDATE_2.0.age(),
+                        expected_age: CANDIDATE_2.0.age,
                         target_interval_centre: TARGET_INTERVAL_2,
                         section_info: OUR_INITIAL_SECTION_INFO,
                     })
@@ -1289,13 +1323,13 @@ mod src_tests {
             .enumerate()
             .map(|(name_increment, state)| {
                 let node = Node(Attributes {
-                    name: 1000 + name_increment as i32,
+                    name: Name(1000 + name_increment as i32),
                     age,
                 });
                 NodeState {
                     node,
                     is_elder: false,
-                    work_units_done: age,
+                    work_units_done: age.0,
                     state,
                 }
             })
@@ -1503,7 +1537,7 @@ mod src_tests {
         );
 
         run_test(
-            "Vote for RPC to be proceesed",
+            "Vote for RPC to be processed",
             &initial_state,
             &[
                 Rpc::RelocateResponse(get_relocated_info(CANDIDATE_205, DST_SECTION_INFO_200))
@@ -1530,7 +1564,7 @@ mod src_tests {
             ],
         );
 
-        let description = "When RelocateResponse, update node state and vote for RelocatedInfo.\
+        let description = "When RelocateResponse, update node state and vote for RelocatedInfo. \
                            When RelocatedInfo consensused send RPC and remove node,";
         run_test(
             description,
@@ -2032,7 +2066,7 @@ mod node_tests {
         );
 
         run_joining_test(
-            "When connected, resend the incompleted proofs not sent within timeout.",
+            "When connected, resend the incomplete proofs not sent within timeout.",
             &initial_state,
             &[
                 LocalEvent::JoiningTimeoutResendInfo.to_event(),

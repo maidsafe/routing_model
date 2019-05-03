@@ -6,26 +6,54 @@
 // KIND, either express or implied. Please review the Licences for the specific language governing
 // permissions and limitations relating to use of the SAFE Network Software.
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
-pub struct Name(pub i32);
-
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
-pub struct Age(pub i32);
+use rand::{
+    distributions::{Distribution, Standard},
+    Rng,
+};
+use std::fmt::{self, Debug, Formatter};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Eq, Ord)]
-pub struct Attributes {
-    pub age: i32,
-    pub name: i32,
+pub struct Name(pub i32);
+
+impl Distribution<Name> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Name {
+        Name(rng.gen_range(-9999, 10000))
+    }
 }
 
-impl Attributes {
-    pub fn name(self) -> Name {
-        Name(self.name)
-    }
+#[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Eq, Ord)]
+pub struct Age(pub i32);
 
-    #[allow(dead_code)]
-    pub fn age(self) -> Age {
-        Age(self.age)
+impl Distribution<Age> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Age {
+        Age(rng.gen_range(5, 101))
+    }
+}
+
+impl Age {
+    pub fn increment_by_one(self) -> Age {
+        Age(self.0 + 1)
+    }
+}
+
+#[derive(Clone, Copy, Default, PartialEq, PartialOrd, Eq, Ord)]
+pub struct Attributes {
+    pub age: Age,
+    pub name: Name,
+}
+
+impl Debug for Attributes {
+    fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
+        write!(formatter, "{:?}, {:?}", self.age, self.name)
+    }
+}
+
+impl Distribution<Attributes> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Attributes {
+        Attributes {
+            age: rng.gen(),
+            name: rng.gen(),
+        }
     }
 }
 
@@ -34,16 +62,28 @@ pub struct Candidate(pub Attributes);
 
 impl Candidate {
     pub fn name(self) -> Name {
-        self.0.name()
+        self.0.name
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
+impl Distribution<Candidate> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Candidate {
+        Candidate(rng.gen())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Node(pub Attributes);
 
 impl Node {
     pub fn name(self) -> Name {
-        self.0.name()
+        self.0.name
+    }
+}
+
+impl Distribution<Node> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Node {
+        Node(rng.gen())
     }
 }
 
@@ -131,6 +171,15 @@ pub struct NodeState {
     pub state: State,
 }
 
+impl NodeState {
+    pub fn default_elder() -> NodeState {
+        NodeState {
+            is_elder: true,
+            ..NodeState::default()
+        }
+    }
+}
+
 impl Default for NodeState {
     fn default() -> NodeState {
         NodeState {
@@ -147,6 +196,13 @@ pub struct Section(pub i32);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Ord, Eq)]
 pub struct SectionInfo(pub Section, pub i32 /*contain full membership */);
+
+impl Distribution<SectionInfo> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> SectionInfo {
+        // Avoid randomly generating default `Section(0)`.
+        SectionInfo(Section(rng.gen_range(1, i32::max_value())), rng.gen())
+    }
+}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Ord, Eq)]
 pub struct GenesisPfxInfo(pub SectionInfo);
@@ -309,7 +365,7 @@ impl Rpc {
             Rpc::NodeApproval(candidate, _)
             | Rpc::NodeConnected(candidate, _)
             | Rpc::ResourceProof { candidate, .. }
-            | Rpc::ResourceProofReceipt { candidate, .. } => Some(Name(candidate.0.name)),
+            | Rpc::ResourceProofReceipt { candidate, .. } => Some(candidate.0.name),
 
             Rpc::ResourceProofResponse { destination, .. }
             | Rpc::CandidateInfo(CandidateInfo { destination, .. })

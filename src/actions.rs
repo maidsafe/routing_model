@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::utilities::{
-    ActionTriggered, Age, Attributes, Candidate, CandidateInfo, ChangeElder, Event, GenesisPfxInfo,
+    ActionTriggered, Attributes, Candidate, CandidateInfo, ChangeElder, Event, GenesisPfxInfo,
     LocalEvent, MergeInfo, Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest,
     ProofSource, RelocatedInfo, Rpc, Section, SectionInfo, State, TestEvent,
 };
@@ -61,11 +61,8 @@ impl InnerAction {
 
     pub fn extend_current_nodes(mut self, nodes: &[NodeState]) -> Self {
         let expected_count = self.our_current_nodes.len() + nodes.len();
-        self.our_current_nodes.extend(
-            nodes
-                .iter()
-                .map(|state| (Name(state.node.0.name), state.clone())),
-        );
+        self.our_current_nodes
+            .extend(nodes.iter().map(|state| (state.node.0.name, state.clone())));
         assert!(
             expected_count == self.our_current_nodes.len(),
             "Failed to add all nodes."
@@ -179,7 +176,7 @@ impl Action {
                 .borrow_mut()
                 .our_current_nodes
                 .get_mut(&name)
-                .map(|state| state.work_units_done = state.node.0.age);
+                .map(|state| state.work_units_done = state.node.0.age.0);
         };
 
         match event {
@@ -224,15 +221,15 @@ impl Action {
 
         let info = RelocatedInfo {
             candidate,
-            expected_age: Age(candidate.0.age + 1),
+            expected_age: candidate.0.age.increment_by_one(),
             target_interval_centre,
             section_info: self.0.borrow().our_section,
         };
 
         let state = NodeState {
             node: Node(Attributes {
-                name: info.target_interval_centre.0,
-                age: info.expected_age.0,
+                name: info.target_interval_centre,
+                age: info.expected_age,
             }),
             state: State::WaitingCandidateInfo(info),
             ..NodeState::default()
@@ -365,7 +362,7 @@ impl Action {
         for (node, new_is_elder) in &change_elder.changes {
             self.0
                 .borrow_mut()
-                .set_elder_state(Name(node.0.name), *new_is_elder);
+                .set_elder_state(node.0.name, *new_is_elder);
         }
         self.0
             .borrow_mut()
@@ -377,7 +374,9 @@ impl Action {
             .borrow()
             .our_current_nodes
             .values()
-            .find(|state| state.state == State::Online && state.work_units_done >= state.node.0.age)
+            .find(|state| {
+                state.state == State::Online && state.work_units_done >= state.node.0.age.0
+            })
             .map(|state| Candidate(state.node.0))
     }
 
@@ -404,8 +403,8 @@ impl Action {
                     state.state == State::RelocatingAgeIncrease,
                     state.state == State::RelocatingHop,
                     state.state == State::RelocatingBackOnline,
-                    state.node.0.age(),
-                    state.node.0.name(),
+                    state.node.0.age,
+                    state.node.0.name,
                 )
             })
             .map(|state| (Candidate(state.node.0), Section::default()))
@@ -415,7 +414,7 @@ impl Action {
         self.0
             .borrow()
             .our_current_nodes
-            .get(&Name(candidate.0.name))
+            .get(&candidate.0.name)
             .map(|state| state.state.is_relocating())
             .unwrap_or(false)
     }
@@ -481,7 +480,11 @@ impl Action {
     }
 
     pub fn our_name(&self) -> Name {
-        Name(self.0.borrow().our_attributes.name)
+        self.0.borrow().our_attributes.name
+    }
+
+    pub fn node_state(&self, name: Name) -> Option<NodeState> {
+        self.0.borrow().our_current_nodes.get(&name).cloned()
     }
 
     pub fn send_node_approval_rpc(&self, candidate: Candidate) {
