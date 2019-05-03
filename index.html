@@ -1315,7 +1315,7 @@
 
         Consensus((Consensus))
         WaitFor-- Parsec<br />consensus --> Consensus
-        Consensus -- "NewSectionInfo" --> CompleteMerge
+        Consensus -- "Parsec::NewSectionInfo" --> CompleteMerge
         CompleteMerge["complete_merge()<br />(Start parsec with new genesis...)"]
         CompleteMerge --> MarkNewElderAdults
 
