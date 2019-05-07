@@ -207,9 +207,6 @@ impl Distribution<SectionInfo> for Standard {
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Ord, Eq)]
 pub struct GenesisPfxInfo(pub SectionInfo);
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Ord, Eq)]
-pub struct MergeInfo(pub SectionInfo);
-
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Ord, Eq)]
 pub enum ChurnNeeded {
     Split,
@@ -409,7 +406,7 @@ pub enum ParsecVote {
     Offline(Node),
     BackOnline(Node),
 
-    NeighbourMerge(MergeInfo),
+    NeighbourMerge(SectionInfo),
 }
 
 impl ParsecVote {
@@ -483,7 +480,7 @@ impl TestEvent {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ActionTriggered {
     WorkUnitIncremented,
-    MergeInfoStored(MergeInfo),
+    MergeInfoStored(SectionInfo),
     OurSectionChanged(SectionInfo),
 
     CompleteMerge,

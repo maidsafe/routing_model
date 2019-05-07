@@ -11,9 +11,9 @@ use crate::{
     state::*,
     utilities::{
         ActionTriggered, Age, Attributes, Candidate, CandidateInfo, ChurnNeeded, Event,
-        GenesisPfxInfo, LocalEvent, MergeInfo, Name, Node, NodeChange, NodeState, ParsecVote,
-        Proof, ProofRequest, ProofSource, RelocatedInfo, Rpc, Section, SectionInfo, State,
-        TestEvent, TryResult,
+        GenesisPfxInfo, LocalEvent, Name, Node, NodeChange, NodeState, ParsecVote, Proof,
+        ProofRequest, ProofSource, RelocatedInfo, Rpc, Section, SectionInfo, State, TestEvent,
+        TryResult,
     },
 };
 use lazy_static::lazy_static;
@@ -836,9 +836,7 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[Rpc::Merge(OTHER_SECTION_INFO).to_event()],
             &AssertState {
-                action_our_events: vec![
-                    ParsecVote::NeighbourMerge(MergeInfo(OTHER_SECTION_INFO)).to_event()
-                ],
+                action_our_events: vec![ParsecVote::NeighbourMerge(OTHER_SECTION_INFO).to_event()],
             },
         );
     }
@@ -848,12 +846,11 @@ mod dst_tests {
         run_test(
             "When a neighbour Merge RPC is consensused, store its info to decide merging",
             &initial_state_old_elders(),
-            &[ParsecVote::NeighbourMerge(MergeInfo(OTHER_SECTION_INFO)).to_event()],
+            &[ParsecVote::NeighbourMerge(OTHER_SECTION_INFO).to_event()],
             &AssertState {
-                action_our_events: vec![ActionTriggered::MergeInfoStored(MergeInfo(
-                    OTHER_SECTION_INFO,
-                ))
-                .to_event()],
+                action_our_events: vec![
+                    ActionTriggered::MergeInfoStored(OTHER_SECTION_INFO).to_event()
+                ],
             },
         );
     }
@@ -862,7 +859,7 @@ mod dst_tests {
     fn parsec_neighbour_merge_then_check_elder() {
         let initial_state = arrange_initial_state(
             &initial_state_old_elders(),
-            &[ParsecVote::NeighbourMerge(MergeInfo(OTHER_SECTION_INFO)).to_event()],
+            &[ParsecVote::NeighbourMerge(OTHER_SECTION_INFO).to_event()],
         );
 
         run_test(
@@ -907,10 +904,10 @@ mod dst_tests {
         run_test(
             "Decide to merge, and then later store merge infos in ProcessMerge",
             &initial_state,
-            &[ParsecVote::NeighbourMerge(MergeInfo(OTHER_SECTION_INFO)).to_event()],
+            &[ParsecVote::NeighbourMerge(OTHER_SECTION_INFO).to_event()],
             &AssertState {
                 action_our_events: vec![
-                    ActionTriggered::MergeInfoStored(MergeInfo(OTHER_SECTION_INFO)).to_event(),
+                    ActionTriggered::MergeInfoStored(OTHER_SECTION_INFO).to_event(),
                     ParsecVote::NewSectionInfo(MERGED_SECTION_INFO).to_event(),
                 ],
             },
@@ -929,11 +926,11 @@ mod dst_tests {
         run_test(
             "Get consensus on merging with a non-sibling neighbour",
             &initial_state,
-            &[ParsecVote::NeighbourMerge(MergeInfo(REMOTE_OTHER_SECTION_INFO)).to_event()],
+            &[ParsecVote::NeighbourMerge(REMOTE_OTHER_SECTION_INFO).to_event()],
             &AssertState {
-                action_our_events: vec![ActionTriggered::MergeInfoStored(MergeInfo(
+                action_our_events: vec![ActionTriggered::MergeInfoStored(
                     REMOTE_OTHER_SECTION_INFO,
-                ))
+                )
                 .to_event()],
             },
         );
@@ -944,7 +941,7 @@ mod dst_tests {
         let initial_state = arrange_initial_state(
             &initial_state_old_elders(),
             &[
-                ParsecVote::NeighbourMerge(MergeInfo(OTHER_SECTION_INFO)).to_event(),
+                ParsecVote::NeighbourMerge(OTHER_SECTION_INFO).to_event(),
                 ParsecVote::CheckElder.to_event(),
             ],
         );

@@ -12,8 +12,8 @@ use crate::{
         StartResourceProofState,
     },
     utilities::{
-        Candidate, CandidateInfo, ChangeElder, LocalEvent, MergeInfo, Name, Node, ParsecVote,
-        Proof, RelocatedInfo, Rpc, SectionInfo, TryResult, WaitedEvent,
+        Candidate, CandidateInfo, ChangeElder, LocalEvent, Name, Node, ParsecVote, Proof,
+        RelocatedInfo, Rpc, SectionInfo, TryResult, WaitedEvent,
     },
 };
 use unwrap::unwrap;
@@ -463,7 +463,7 @@ impl<'a> StartMergeSplitAndChangeElders<'a> {
         }
     }
 
-    fn store_merge_infos(&mut self, merge_info: MergeInfo) {
+    fn store_merge_infos(&mut self, merge_info: SectionInfo) {
         self.0.action.store_merge_infos(merge_info);
     }
 
@@ -530,7 +530,7 @@ impl<'a> StartMergeSplitAndChangeElders<'a> {
     fn vote_parsec_neighbour_merge(&mut self, section_info: SectionInfo) {
         self.0
             .action
-            .vote_parsec(ParsecVote::NeighbourMerge(MergeInfo(section_info)));
+            .vote_parsec(ParsecVote::NeighbourMerge(section_info));
     }
 
     fn start_check_elder_timeout(&self) {
@@ -614,9 +614,7 @@ pub struct ProcessMerge<'a>(pub &'a mut MemberState);
 impl<'a> ProcessMerge<'a> {
     pub fn start_event_loop(&mut self) {
         self.set_is_active(true);
-        self.0
-            .action
-            .send_rpc(Rpc::Merge(self.0.action.our_section()));
+        self.0.action.send_merge_rpc();
         self.check_sibling_merge_info();
     }
 
@@ -658,7 +656,7 @@ impl<'a> ProcessMerge<'a> {
                 TryResult::Handled
             }
             ParsecVote::NeighbourMerge(merge_info) => {
-                self.store_merge_infos(merge_info);
+                self.0.action.store_merge_infos(merge_info);
                 self.check_sibling_merge_info();
                 TryResult::Handled
             }
@@ -668,10 +666,6 @@ impl<'a> ProcessMerge<'a> {
 
     fn update_elder_status(&self) {
         // TODO
-    }
-
-    fn store_merge_infos(&self, merge_info: MergeInfo) {
-        self.0.action.store_merge_infos(merge_info);
     }
 }
 
