@@ -10,9 +10,10 @@ use crate::{
     actions::*,
     state::*,
     utilities::{
-        ActionTriggered, Age, Attributes, Candidate, CandidateInfo, Event, GenesisPfxInfo,
-        LocalEvent, MergeInfo, Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest,
-        ProofSource, RelocatedInfo, Rpc, Section, SectionInfo, State, TestEvent, TryResult,
+        ActionTriggered, Age, Attributes, Candidate, CandidateInfo, ChurnNeeded, Event,
+        GenesisPfxInfo, LocalEvent, MergeInfo, Name, Node, NodeChange, NodeState, ParsecVote,
+        Proof, ProofRequest, ProofSource, RelocatedInfo, Rpc, Section, SectionInfo, State,
+        TestEvent, TryResult,
     },
 };
 use lazy_static::lazy_static;
@@ -871,11 +872,26 @@ mod dst_tests {
             "Merge if we detect our section needs merging on CheckElder",
             &initial_state,
             &[
-                TestEvent::SetMergeNeeded(true).to_event(),
+                TestEvent::SetChurnNeeded(ChurnNeeded::Merge).to_event(),
                 ParsecVote::CheckElder.to_event(),
             ],
             &AssertState {
                 action_our_events: vec![Rpc::Merge.to_event()],
+            },
+        );
+    }
+
+    #[test]
+    fn parsec_check_elder() {
+        run_test(
+            "Split if we detect our section needs splitting on CheckElder",
+            &initial_state_old_elders(),
+            &[
+                TestEvent::SetChurnNeeded(ChurnNeeded::Split).to_event(),
+                ParsecVote::CheckElder.to_event(),
+            ],
+            &AssertState {
+                action_our_events: vec![Rpc::Split.to_event()],
             },
         );
     }

@@ -417,10 +417,9 @@ impl<'a> StartResourceProof<'a> {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct CheckAndProcessElderChange<'a>(pub &'a mut MemberState);
+pub struct StartMergeSplitAndChangeElders<'a>(pub &'a mut MemberState);
 
-// CheckAndProcessElderChange Sub Routine
-impl<'a> CheckAndProcessElderChange<'a> {
+impl<'a> StartMergeSplitAndChangeElders<'a> {
     // TODO - remove the `allow` once we have a test for this method.
     #[allow(dead_code)]
     fn start_event_loop(&mut self) {
@@ -476,6 +475,10 @@ impl<'a> CheckAndProcessElderChange<'a> {
         self.0.action.has_merge_infos()
     }
 
+    fn split_needed(&self) -> bool {
+        self.0.action.split_needed()
+    }
+
     fn check_merge(&mut self) {
         if self.has_merge_infos() || self.merge_needed() {
             // TODO: -> Concurrent to ProcessMerge
@@ -488,7 +491,14 @@ impl<'a> CheckAndProcessElderChange<'a> {
     fn check_elder(&mut self) {
         match self.0.action.check_elder() {
             Some(change_elder) => self.concurrent_transition_to_process_elder_change(change_elder),
-            None => self.start_check_elder_timeout(),
+            None => {
+                if self.split_needed() {
+                    // TODO: -> Concurrent to ProcessSplit
+                    self.0.action.send_rpc(Rpc::Split);
+                } else {
+                    self.start_check_elder_timeout();
+                }
+            }
         }
     }
 
@@ -499,6 +509,8 @@ impl<'a> CheckAndProcessElderChange<'a> {
     }
 
     fn transition_exit_process_elder_change(&mut self) {
+        // TODO: ResourceProof_Cancel
+        // TODO: RelocatedNodeConnection_Reset
         self.start_check_elder_timeout()
     }
 
@@ -531,7 +543,7 @@ impl<'a> ProcessElderChange<'a> {
         self.mut_routine_state().is_active = false;
         self.mut_routine_state().change_elder = None;
         self.0
-            .as_check_and_process_elder_change()
+            .as_start_merge_split_and_change_elders()
             .transition_exit_process_elder_change()
     }
 
@@ -570,14 +582,14 @@ impl<'a> ProcessElderChange<'a> {
     fn routine_state(&self) -> &ProcessElderChangeState {
         &self
             .0
-            .check_and_process_elder_change_routine
+            .start_merge_split_and_change_elders
             .sub_routine_process_elder_change
     }
 
     fn mut_routine_state(&mut self) -> &mut ProcessElderChangeState {
         &mut self
             .0
-            .check_and_process_elder_change_routine
+            .start_merge_split_and_change_elders
             .sub_routine_process_elder_change
     }
 
