@@ -207,9 +207,6 @@ impl Distribution<SectionInfo> for Standard {
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Ord, Eq)]
 pub struct GenesisPfxInfo(pub SectionInfo);
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Ord, Eq)]
-pub struct MergeInfo;
-
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Ord, Eq)]
 pub enum ChurnNeeded {
     Split,
@@ -352,7 +349,7 @@ pub enum Rpc {
         connection_info: i32,
     },
 
-    Merge,
+    Merge(SectionInfo),
     Split,
 }
 
@@ -367,7 +364,7 @@ impl Rpc {
             | Rpc::RelocateResponse(_)
             | Rpc::RelocatedInfo(_)
             | Rpc::ExpectCandidate(_)
-            | Rpc::Merge
+            | Rpc::Merge(_)
             | Rpc::Split => None,
 
             Rpc::NodeApproval(candidate, _)
@@ -409,7 +406,7 @@ pub enum ParsecVote {
     Offline(Node),
     BackOnline(Node),
 
-    NeighbourMerge(MergeInfo),
+    NeighbourMerge(SectionInfo),
 }
 
 impl ParsecVote {
@@ -483,8 +480,10 @@ impl TestEvent {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ActionTriggered {
     WorkUnitIncremented,
-    MergeInfoStored(MergeInfo),
+    MergeInfoStored(SectionInfo),
     OurSectionChanged(SectionInfo),
+
+    CompleteMerge,
 
     Scheduled(LocalEvent),
     Killed(LocalEvent),

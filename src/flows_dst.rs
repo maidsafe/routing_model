@@ -12,8 +12,8 @@ use crate::{
         StartResourceProofState,
     },
     utilities::{
-        Candidate, CandidateInfo, ChangeElder, LocalEvent, MergeInfo, Name, Node, ParsecVote,
-        Proof, RelocatedInfo, Rpc, TryResult, WaitedEvent,
+        Candidate, CandidateInfo, ChangeElder, LocalEvent, Name, Node, ParsecVote, Proof,
+        RelocatedInfo, Rpc, SectionInfo, TryResult, WaitedEvent,
     },
 };
 use unwrap::unwrap;
@@ -454,8 +454,8 @@ impl<'a> StartMergeSplitAndChangeElders<'a> {
 
     fn try_rpc(&mut self, rpc: Rpc) -> TryResult {
         match rpc {
-            Rpc::Merge => {
-                self.vote_parsec_neighbour_merge();
+            Rpc::Merge(section_info) => {
+                self.vote_parsec_neighbour_merge(section_info);
                 TryResult::Handled
             }
 
@@ -463,16 +463,16 @@ impl<'a> StartMergeSplitAndChangeElders<'a> {
         }
     }
 
-    fn store_merge_infos(&mut self, merge_info: MergeInfo) {
+    fn store_merge_infos(&mut self, merge_info: SectionInfo) {
         self.0.action.store_merge_infos(merge_info);
-    }
-
-    fn merge_needed(&mut self) -> bool {
-        self.0.action.merge_needed()
     }
 
     fn has_merge_infos(&mut self) -> bool {
         self.0.action.has_merge_infos()
+    }
+
+    fn merge_needed(&mut self) -> bool {
+        self.0.action.merge_needed()
     }
 
     fn split_needed(&self) -> bool {
@@ -481,10 +481,9 @@ impl<'a> StartMergeSplitAndChangeElders<'a> {
 
     fn check_merge(&mut self) {
         if self.has_merge_infos() || self.merge_needed() {
-            // TODO: -> Concurrent to ProcessMerge
-            self.0.action.send_rpc(Rpc::Merge);
+            self.concurrent_transition_to_process_merge();
         } else {
-            self.check_elder()
+            self.check_elder();
         }
     }
 
@@ -502,6 +501,10 @@ impl<'a> StartMergeSplitAndChangeElders<'a> {
         }
     }
 
+    fn concurrent_transition_to_process_merge(&mut self) {
+        self.0.as_process_merge().start_event_loop()
+    }
+
     fn concurrent_transition_to_process_elder_change(&mut self, change_elder: ChangeElder) {
         self.0
             .as_process_elder_change()
@@ -514,17 +517,23 @@ impl<'a> StartMergeSplitAndChangeElders<'a> {
         self.start_check_elder_timeout()
     }
 
+    fn transition_exit_process_merge(&self) {
+        // TODO: ResourceProof_Cancel
+        // TODO: RelocatedNodeConnection_Reset
+        self.start_check_elder_timeout()
+    }
+
     fn vote_parsec_check_elder(&mut self) {
         self.0.action.vote_parsec(ParsecVote::CheckElder);
     }
 
-    fn vote_parsec_neighbour_merge(&mut self) {
+    fn vote_parsec_neighbour_merge(&mut self, section_info: SectionInfo) {
         self.0
             .action
-            .vote_parsec(ParsecVote::NeighbourMerge(MergeInfo));
+            .vote_parsec(ParsecVote::NeighbourMerge(section_info));
     }
 
-    fn start_check_elder_timeout(&mut self) {
+    fn start_check_elder_timeout(&self) {
         self.0.action.schedule_event(LocalEvent::TimeoutCheckElder);
     }
 }
@@ -596,6 +605,67 @@ impl<'a> ProcessElderChange<'a> {
     fn mark_elder_change(&mut self) {
         let change_elder = unwrap!(self.mut_routine_state().change_elder.take());
         self.0.action.mark_elder_change(change_elder);
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ProcessMerge<'a>(pub &'a mut MemberState);
+
+impl<'a> ProcessMerge<'a> {
+    pub fn start_event_loop(&mut self) {
+        self.set_is_active(true);
+        self.0.action.send_merge_rpc();
+        self.check_sibling_merge_info();
+    }
+
+    fn exit_event_loop(&mut self) {
+        self.set_is_active(false);
+        self.0
+            .as_start_merge_split_and_change_elders()
+            .transition_exit_process_merge()
+    }
+
+    fn set_is_active(&mut self, is_active: bool) {
+        self.0
+            .start_merge_split_and_change_elders
+            .sub_routine_process_merge_active = is_active;
+    }
+
+    fn check_sibling_merge_info(&self) {
+        if self.0.action.has_sibling_merge_info() {
+            let new_section = self.0.action.merge_sibling_info_to_new_section();
+            self.0
+                .action
+                .vote_parsec(ParsecVote::NewSectionInfo(new_section));
+        }
+    }
+
+    pub fn try_next(&mut self, event: WaitedEvent) -> TryResult {
+        match event {
+            WaitedEvent::ParsecConsensus(vote) => self.try_consensus(vote),
+            WaitedEvent::Rpc(_) | WaitedEvent::LocalEvent(_) => TryResult::Unhandled,
+        }
+    }
+
+    fn try_consensus(&mut self, vote: ParsecVote) -> TryResult {
+        match vote {
+            ParsecVote::NewSectionInfo(_) => {
+                self.0.action.complete_merge();
+                self.update_elder_status();
+                self.exit_event_loop();
+                TryResult::Handled
+            }
+            ParsecVote::NeighbourMerge(merge_info) => {
+                self.0.action.store_merge_infos(merge_info);
+                self.check_sibling_merge_info();
+                TryResult::Handled
+            }
+            _ => TryResult::Unhandled,
+        }
+    }
+
+    fn update_elder_status(&self) {
+        // TODO
     }
 }
 

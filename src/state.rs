@@ -23,6 +23,7 @@ pub struct ProcessElderChangeState {
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct StartMergeSplitAndChangeEldersState {
     pub sub_routine_process_elder_change: ProcessElderChangeState,
+    pub sub_routine_process_merge_active: bool,
 }
 
 #[derive(Debug, PartialEq, Default, Clone)]
@@ -44,9 +45,6 @@ pub struct StartRelocatedNodeConnectionState {
     pub candidates_voted: BTreeSet<Name>,
 }
 
-#[derive(Debug, PartialEq, Default, Clone)]
-pub struct SrcRoutineState {}
-
 // The very top level event loop deciding how the sub event loops are processed
 #[derive(PartialEq, Default, Clone, Debug)]
 pub struct MemberState {
@@ -54,7 +52,6 @@ pub struct MemberState {
     pub failure: Option<Event>,
     pub start_resource_proof: StartResourceProofState,
     pub start_relocated_node_connection_state: StartRelocatedNodeConnectionState,
-    pub src_routine: SrcRoutineState,
     pub start_relocate_src: StartRelocateSrcState,
     pub start_merge_split_and_change_elders: StartMergeSplitAndChangeEldersState,
 }
@@ -68,11 +65,13 @@ impl MemberState {
 
         let event = unwrap!(event.to_waited_event());
 
-        if let TryResult::Handled = self
-            .as_start_merge_split_and_change_elders()
-            .try_next(event)
+        if self
+            .start_merge_split_and_change_elders
+            .sub_routine_process_merge_active
         {
-            return TryResult::Handled;
+            if let TryResult::Handled = self.as_process_merge().try_next(event) {
+                return TryResult::Handled;
+            }
         }
 
         if self
@@ -83,6 +82,13 @@ impl MemberState {
             if let TryResult::Handled = self.as_process_elder_change().try_next(event) {
                 return TryResult::Handled;
             }
+        }
+
+        if let TryResult::Handled = self
+            .as_start_merge_split_and_change_elders()
+            .try_next(event)
+        {
+            return TryResult::Handled;
         }
 
         if let TryResult::Handled = self.as_check_online_offline().try_next(event) {
@@ -158,6 +164,10 @@ impl MemberState {
         StartRelocateSrc(self)
     }
 
+    pub fn as_process_merge(&mut self) -> ProcessMerge {
+        ProcessMerge(self)
+    }
+
     pub fn as_process_elder_change(&mut self) -> ProcessElderChange {
         ProcessElderChange(self)
     }
@@ -225,7 +235,6 @@ impl Display for MemberState {
             "    {:?}",
             self.start_relocated_node_connection_state
         )?;
-        writeln!(formatter, "    {:?}", self.src_routine)?;
         writeln!(formatter, "    {:?}", self.start_relocate_src)?;
         writeln!(
             formatter,

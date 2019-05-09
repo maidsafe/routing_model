@@ -1035,7 +1035,7 @@
         <button class="collapsible">Rpc::Merge</button>
         <div class="content">
             <p>A section sends a Rpc::Merge to their neighbour section when they are ready to merge at the given
-                SectionInfo digest.<br />
+                SectionInfo digest. The RPC contains the SectionInfo of the originating section.<br />
                 In this flow, we handle both situations:<br>
                 <ul>
                     <li> Our neighbour triggers the merge and we receive their Rpc::Merge.<br>
@@ -1261,7 +1261,7 @@
         </p>
         <button class="collapsible">Rpc::Merge</button>
         <div class="content">
-            <p>We send it to our sibling section (or sections with longer prefix) on entering ProcessMerge.<br>
+            <p>We send it to our sibling section (or sections with longer prefix) on entering ProcessMerge, containing our own SectionInfo.<br>
                 We send Merge irrespective of whether we are the section that triggered the merge. This allows all
                 sections involved in the merge to receive a Rpc::Merge, which is how Parsec::NeighbourMerge gets voted
                 for.
@@ -1315,7 +1315,7 @@
 
         Consensus((Consensus))
         WaitFor-- Parsec<br />consensus --> Consensus
-        Consensus -- "NewSectionInfo" --> CompleteMerge
+        Consensus -- "Parsec::NewSectionInfo" --> CompleteMerge
         CompleteMerge["complete_merge()<br />(Start parsec with new genesis...)"]
         CompleteMerge --> MarkNewElderAdults
 

@@ -11,9 +11,9 @@ use crate::{
     state::*,
     utilities::{
         ActionTriggered, Age, Attributes, Candidate, CandidateInfo, ChurnNeeded, Event,
-        GenesisPfxInfo, LocalEvent, MergeInfo, Name, Node, NodeChange, NodeState, ParsecVote,
-        Proof, ProofRequest, ProofSource, RelocatedInfo, Rpc, Section, SectionInfo, State,
-        TestEvent, TryResult,
+        GenesisPfxInfo, LocalEvent, Name, Node, NodeChange, NodeState, ParsecVote, Proof,
+        ProofRequest, ProofSource, RelocatedInfo, Rpc, Section, SectionInfo, State, TestEvent,
+        TryResult,
     },
 };
 use lazy_static::lazy_static;
@@ -59,7 +59,9 @@ const CANDIDATE_205: Candidate = Candidate(Attributes {
     age: Age(5),
 });
 const OTHER_SECTION_1: Section = Section(1);
+const OTHER_SECTION_2: Section = Section(2);
 const DST_SECTION_200: Section = Section(200);
+const MERGED_SECTION_2: Section = Section(2);
 
 const NODE_1_OLD: Node = Node(ATTRIBUTES_1_OLD);
 const NODE_1: Node = Node(ATTRIBUTES_1);
@@ -100,6 +102,10 @@ const YOUNG_ADULT_205: Node = Node(Attributes {
 const SECTION_INFO_1: SectionInfo = SectionInfo(OUR_SECTION, 1);
 const SECTION_INFO_2: SectionInfo = SectionInfo(OUR_SECTION, 2);
 const DST_SECTION_INFO_200: SectionInfo = SectionInfo(DST_SECTION_200, 0);
+
+const OTHER_SECTION_INFO: SectionInfo = SectionInfo(OTHER_SECTION_1, 0);
+const REMOTE_OTHER_SECTION_INFO: SectionInfo = SectionInfo(OTHER_SECTION_2, 0);
+const MERGED_SECTION_INFO: SectionInfo = SectionInfo(MERGED_SECTION_2, 0);
 
 const CANDIDATE_INFO_VALID_1: CandidateInfo = CandidateInfo {
     old_public_id: CANDIDATE_1_OLD,
@@ -828,9 +834,9 @@ mod dst_tests {
         run_test(
             "",
             &initial_state_old_elders(),
-            &[Rpc::Merge.to_event()],
+            &[Rpc::Merge(OTHER_SECTION_INFO).to_event()],
             &AssertState {
-                action_our_events: vec![ParsecVote::NeighbourMerge(MergeInfo).to_event()],
+                action_our_events: vec![ParsecVote::NeighbourMerge(OTHER_SECTION_INFO).to_event()],
             },
         );
     }
@@ -840,9 +846,11 @@ mod dst_tests {
         run_test(
             "When a neighbour Merge RPC is consensused, store its info to decide merging",
             &initial_state_old_elders(),
-            &[ParsecVote::NeighbourMerge(MergeInfo).to_event()],
+            &[ParsecVote::NeighbourMerge(OTHER_SECTION_INFO).to_event()],
             &AssertState {
-                action_our_events: vec![ActionTriggered::MergeInfoStored(MergeInfo).to_event()],
+                action_our_events: vec![
+                    ActionTriggered::MergeInfoStored(OTHER_SECTION_INFO).to_event()
+                ],
             },
         );
     }
@@ -851,7 +859,7 @@ mod dst_tests {
     fn parsec_neighbour_merge_then_check_elder() {
         let initial_state = arrange_initial_state(
             &initial_state_old_elders(),
-            &[ParsecVote::NeighbourMerge(MergeInfo).to_event()],
+            &[ParsecVote::NeighbourMerge(OTHER_SECTION_INFO).to_event()],
         );
 
         run_test(
@@ -859,7 +867,10 @@ mod dst_tests {
             &initial_state,
             &[ParsecVote::CheckElder.to_event()],
             &AssertState {
-                action_our_events: vec![Rpc::Merge.to_event()],
+                action_our_events: vec![
+                    Rpc::Merge(SectionInfo(OUR_SECTION, 0)).to_event(),
+                    ParsecVote::NewSectionInfo(MERGED_SECTION_INFO).to_event(),
+                ],
             },
         );
     }
@@ -876,7 +887,73 @@ mod dst_tests {
                 ParsecVote::CheckElder.to_event(),
             ],
             &AssertState {
-                action_our_events: vec![Rpc::Merge.to_event()],
+                action_our_events: vec![Rpc::Merge(SectionInfo(OUR_SECTION, 0)).to_event()],
+            },
+        );
+    }
+
+    #[test]
+    fn parsec_merge_sibling() {
+        let initial_state = arrange_initial_state(
+            &initial_state_old_elders(),
+            &[
+                TestEvent::SetChurnNeeded(ChurnNeeded::Merge).to_event(),
+                ParsecVote::CheckElder.to_event(),
+            ],
+        );
+        run_test(
+            "Decide to merge, and then later store merge infos in ProcessMerge",
+            &initial_state,
+            &[ParsecVote::NeighbourMerge(OTHER_SECTION_INFO).to_event()],
+            &AssertState {
+                action_our_events: vec![
+                    ActionTriggered::MergeInfoStored(OTHER_SECTION_INFO).to_event(),
+                    ParsecVote::NewSectionInfo(MERGED_SECTION_INFO).to_event(),
+                ],
+            },
+        );
+    }
+
+    #[test]
+    fn parsec_merge_non_sibling() {
+        let initial_state = arrange_initial_state(
+            &initial_state_old_elders(),
+            &[
+                TestEvent::SetChurnNeeded(ChurnNeeded::Merge).to_event(),
+                ParsecVote::CheckElder.to_event(),
+            ],
+        );
+        run_test(
+            "Get consensus on merging with a non-sibling neighbour",
+            &initial_state,
+            &[ParsecVote::NeighbourMerge(REMOTE_OTHER_SECTION_INFO).to_event()],
+            &AssertState {
+                action_our_events: vec![ActionTriggered::MergeInfoStored(
+                    REMOTE_OTHER_SECTION_INFO,
+                )
+                .to_event()],
+            },
+        );
+    }
+
+    #[test]
+    fn parsec_new_section() {
+        let initial_state = arrange_initial_state(
+            &initial_state_old_elders(),
+            &[
+                ParsecVote::NeighbourMerge(OTHER_SECTION_INFO).to_event(),
+                ParsecVote::CheckElder.to_event(),
+            ],
+        );
+        run_test(
+            "Get consensus on new section after merge and finalise",
+            &initial_state,
+            &[ParsecVote::NewSectionInfo(MERGED_SECTION_INFO).to_event()],
+            &AssertState {
+                action_our_events: vec![
+                    ActionTriggered::CompleteMerge.to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::TimeoutCheckElder).to_event(),
+                ],
             },
         );
     }

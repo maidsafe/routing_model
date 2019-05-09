@@ -8,8 +8,8 @@
 
 use crate::utilities::{
     ActionTriggered, Attributes, Candidate, CandidateInfo, ChangeElder, ChurnNeeded, Event,
-    GenesisPfxInfo, LocalEvent, MergeInfo, Name, Node, NodeChange, NodeState, ParsecVote, Proof,
-    ProofRequest, ProofSource, RelocatedInfo, Rpc, Section, SectionInfo, State, TestEvent,
+    GenesisPfxInfo, LocalEvent, Name, Node, NodeChange, NodeState, ParsecVote, Proof, ProofRequest,
+    ProofSource, RelocatedInfo, Rpc, Section, SectionInfo, State, TestEvent,
 };
 use itertools::Itertools;
 use std::{
@@ -32,7 +32,7 @@ pub struct InnerAction {
     pub section_members: BTreeMap<SectionInfo, Vec<Node>>,
     pub next_target_interval: Name,
 
-    pub merge_infos: Option<MergeInfo>,
+    pub merge_infos: Option<SectionInfo>,
     pub churn_needed: Option<ChurnNeeded>,
 
     // Proving node:
@@ -145,10 +145,15 @@ impl InnerAction {
             .push(ActionTriggered::OurSectionChanged(section).to_event());
     }
 
-    fn store_merge_infos(&mut self, merge_info: MergeInfo) {
+    fn store_merge_infos(&mut self, merge_info: SectionInfo) {
         self.merge_infos = Some(merge_info);
         self.our_events
             .push(ActionTriggered::MergeInfoStored(merge_info).to_event());
+    }
+
+    fn complete_merge(&mut self) {
+        self.our_events
+            .push(ActionTriggered::CompleteMerge.to_event());
     }
 }
 
@@ -489,6 +494,10 @@ impl Action {
         self.0.borrow().our_current_nodes.get(&name).cloned()
     }
 
+    pub fn our_section(&self) -> SectionInfo {
+        self.0.borrow().our_section
+    }
+
     pub fn send_node_approval_rpc(&self, candidate: Candidate) {
         let section = GenesisPfxInfo(self.0.borrow().our_section);
         self.send_rpc(Rpc::NodeApproval(candidate, section));
@@ -584,11 +593,15 @@ impl Action {
         });
     }
 
+    pub fn send_merge_rpc(&self) {
+        self.send_rpc(Rpc::Merge(self.our_section()));
+    }
+
     pub fn increment_nodes_work_units(&self) {
         self.action_triggered(ActionTriggered::WorkUnitIncremented);
     }
 
-    pub fn store_merge_infos(&self, merge_info: MergeInfo) {
+    pub fn store_merge_infos(&self, merge_info: SectionInfo) {
         self.0.borrow_mut().store_merge_infos(merge_info);
     }
 
@@ -608,6 +621,34 @@ impl Action {
             .borrow()
             .churn_needed
             .map_or(false, |v| v == ChurnNeeded::Split)
+    }
+
+    pub fn complete_merge(&self) {
+        self.0.borrow_mut().complete_merge()
+    }
+
+    pub fn has_sibling_merge_info(&self) -> bool {
+        match self.0.borrow().merge_infos {
+            Some(merge_info) => {
+                let our_section = self.our_section().0;
+                let their_section = merge_info.0;
+                // Currently Section.0 is a just a (signed) number representing a name, as such we
+                // simply use the arithmetic distance to determine sibling status.
+                // Should we switch over to use prefixes this would need to be updated.
+                (our_section.0 - their_section.0).abs() == 1
+            }
+            None => false,
+        }
+    }
+
+    pub fn merge_sibling_info_to_new_section(&self) -> SectionInfo {
+        let our_section = self.our_section();
+        let their_section = self.0.borrow_mut().merge_infos.take();
+        let their_section = their_section.expect("Merge infos missing").0;
+        // See comment in has_sibling_merge_info() about name of sections. Here we just pick a
+        // simple rule to produce a new section name from the two old ones.
+        // Should we switch over to use prefixes this would need to be updated.
+        SectionInfo(Section((our_section.0).0 + (their_section.0) + 1), 0)
     }
 }
 
