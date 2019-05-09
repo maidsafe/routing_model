@@ -155,6 +155,11 @@ impl InnerAction {
         self.our_events
             .push(ActionTriggered::CompleteMerge.to_event());
     }
+
+    fn complete_split(&mut self) {
+        self.our_events
+            .push(ActionTriggered::CompleteSplit.to_event());
+    }
 }
 
 #[derive(Clone)]
@@ -374,6 +379,17 @@ impl Action {
         self.0
             .borrow_mut()
             .set_section_info(change_elder.new_section);
+    }
+
+    pub fn get_section_split_votes(&self) -> Vec<ParsecVote> {
+        // The section name is currently just a signed number, so we just pick an arbirary rule to
+        // generate two new section names.
+        let our_section_name = (self.our_section().0).0;
+        (1..3)
+            .map(|name_offset| {
+                ParsecVote::NewSectionInfo(SectionInfo(Section(our_section_name + name_offset), 0))
+            })
+            .collect_vec()
     }
 
     pub fn get_node_to_relocate(&self) -> Option<Candidate> {
@@ -649,6 +665,10 @@ impl Action {
         // simple rule to produce a new section name from the two old ones.
         // Should we switch over to use prefixes this would need to be updated.
         SectionInfo(Section((our_section.0).0 + (their_section.0) + 1), 0)
+    }
+
+    pub fn complete_split(&self) {
+        self.0.borrow_mut().complete_split()
     }
 }
 

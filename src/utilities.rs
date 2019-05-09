@@ -350,7 +350,6 @@ pub enum Rpc {
     },
 
     Merge(SectionInfo),
-    Split,
 }
 
 impl Rpc {
@@ -364,8 +363,7 @@ impl Rpc {
             | Rpc::RelocateResponse(_)
             | Rpc::RelocatedInfo(_)
             | Rpc::ExpectCandidate(_)
-            | Rpc::Merge(_)
-            | Rpc::Split => None,
+            | Rpc::Merge(_) => None,
 
             Rpc::NodeApproval(candidate, _)
             | Rpc::NodeConnected(candidate, _)
@@ -484,6 +482,7 @@ pub enum ActionTriggered {
     OurSectionChanged(SectionInfo),
 
     CompleteMerge,
+    CompleteSplit,
 
     Scheduled(LocalEvent),
     Killed(LocalEvent),
