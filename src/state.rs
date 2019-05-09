@@ -65,6 +65,10 @@ impl MemberState {
 
         let event = unwrap!(event.to_waited_event());
 
+        if let TryResult::Handled = self.as_check_online_offline().try_next(event) {
+            return TryResult::Handled;
+        }
+
         if self
             .start_merge_split_and_change_elders
             .sub_routine_process_merge_active
@@ -88,10 +92,6 @@ impl MemberState {
             .as_start_merge_split_and_change_elders()
             .try_next(event)
         {
-            return TryResult::Handled;
-        }
-
-        if let TryResult::Handled = self.as_check_online_offline().try_next(event) {
             return TryResult::Handled;
         }
 
