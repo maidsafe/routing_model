@@ -147,7 +147,7 @@ impl<'a> StartRelocatedNodeConnection<'a> {
                     self.0
                         .action
                         .vote_parsec(ParsecVote::CandidateConnected(*info));
-                    let _ = self.mut_routine_state().candidates_voted.insert(source);
+                    let _ = self.routine_state_mut().candidates_voted.insert(source);
 
                     return TryResult::Handled;
                 }
@@ -185,7 +185,7 @@ impl<'a> StartRelocatedNodeConnection<'a> {
         &self.0.start_relocated_node_connection_state
     }
 
-    fn mut_routine_state(&mut self) -> &mut StartRelocatedNodeConnectionState {
+    fn routine_state_mut(&mut self) -> &mut StartRelocatedNodeConnectionState {
         &mut self.0.start_relocated_node_connection_state
     }
 
@@ -203,16 +203,16 @@ impl<'a> StartRelocatedNodeConnection<'a> {
         }
 
         let candidates = self.0.action.waiting_nodes_connecting();
-        let mut_routine_state = &mut self.mut_routine_state();
+        let routine_state_mut = &mut self.routine_state_mut();
 
-        mut_routine_state.candidates = candidates.clone();
-        mut_routine_state.candidates_info = mut_routine_state
+        routine_state_mut.candidates = candidates.clone();
+        routine_state_mut.candidates_info = routine_state_mut
             .candidates_info
             .clone()
             .into_iter()
             .filter(|(name, _)| candidates.contains(name))
             .collect();
-        mut_routine_state.candidates_voted = mut_routine_state
+        routine_state_mut.candidates_voted = routine_state_mut
             .candidates_voted
             .clone()
             .into_iter()
@@ -222,7 +222,7 @@ impl<'a> StartRelocatedNodeConnection<'a> {
 
     fn cache_candidate_info_and_send_connect_info(&mut self, info: CandidateInfo) {
         let _ = self
-            .mut_routine_state()
+            .routine_state_mut()
             .candidates_info
             .insert(info.new_public_id.name(), info);
         self.0
@@ -333,24 +333,24 @@ impl<'a> StartResourceProof<'a> {
         &self.0.start_resource_proof
     }
 
-    fn mut_routine_state(&mut self) -> &mut StartResourceProofState {
+    fn routine_state_mut(&mut self) -> &mut StartResourceProofState {
         &mut self.0.start_resource_proof
     }
 
     fn discard(&mut self) {}
 
     fn set_resource_proof_candidate(&mut self) {
-        self.mut_routine_state().candidate = self.0.action.resource_proof_candidate();
+        self.routine_state_mut().candidate = self.0.action.resource_proof_candidate();
     }
 
     // TODO - remove the `allow` once we have a test for this method.
     #[allow(dead_code)]
     fn set_got_candidate_info(&mut self, value: bool) {
-        self.mut_routine_state().got_candidate_info = value;
+        self.routine_state_mut().got_candidate_info = value;
     }
 
     fn set_voted_online(&mut self, value: bool) {
-        self.mut_routine_state().voted_online = value;
+        self.routine_state_mut().voted_online = value;
     }
 
     fn vote_parsec_purge_candidate(&mut self) {
@@ -381,9 +381,9 @@ impl<'a> StartResourceProof<'a> {
     }
 
     fn finish_resource_proof(&mut self) {
-        self.mut_routine_state().candidate = None;
-        self.mut_routine_state().voted_online = false;
-        self.mut_routine_state().got_candidate_info = false;
+        self.routine_state_mut().candidate = None;
+        self.routine_state_mut().voted_online = false;
+        self.routine_state_mut().got_candidate_info = false;
 
         self.0
             .action
@@ -552,14 +552,14 @@ pub struct ProcessElderChange<'a>(pub &'a mut MemberState);
 
 impl<'a> ProcessElderChange<'a> {
     pub fn start_event_loop(&mut self, change_elder: ChangeElder) {
-        self.mut_routine_state().is_active = true;
-        self.mut_routine_state().change_elder = Some(change_elder.clone());
+        self.routine_state_mut().is_active = true;
+        self.routine_state_mut().change_elder = Some(change_elder.clone());
         self.vote_for_elder_change(change_elder)
     }
 
     fn exit_event_loop(&mut self) {
-        self.mut_routine_state().is_active = false;
-        self.mut_routine_state().change_elder = None;
+        self.routine_state_mut().is_active = false;
+        self.routine_state_mut().change_elder = None;
         self.0
             .as_start_merge_split_and_change_elders()
             .transition_exit_process_elder_change()
@@ -577,7 +577,7 @@ impl<'a> ProcessElderChange<'a> {
             return TryResult::Unhandled;
         }
 
-        let wait_votes = &mut self.mut_routine_state().wait_votes;
+        let wait_votes = &mut self.routine_state_mut().wait_votes;
         wait_votes.retain(|wait_vote| wait_vote != vote);
 
         if wait_votes.is_empty() {
@@ -589,8 +589,8 @@ impl<'a> ProcessElderChange<'a> {
 
     fn vote_for_elder_change(&mut self, change_elder: ChangeElder) {
         let votes = self.0.action.get_elder_change_votes(&change_elder);
-        self.mut_routine_state().change_elder = Some(change_elder);
-        self.mut_routine_state().wait_votes = votes;
+        self.routine_state_mut().change_elder = Some(change_elder);
+        self.routine_state_mut().wait_votes = votes;
 
         for vote in &self.routine_state().wait_votes {
             self.0.action.vote_parsec(*vote);
@@ -604,7 +604,7 @@ impl<'a> ProcessElderChange<'a> {
             .sub_routine_process_elder_change
     }
 
-    fn mut_routine_state(&mut self) -> &mut ProcessElderChangeState {
+    fn routine_state_mut(&mut self) -> &mut ProcessElderChangeState {
         &mut self
             .0
             .start_merge_split_and_change_elders
@@ -612,7 +612,7 @@ impl<'a> ProcessElderChange<'a> {
     }
 
     fn mark_elder_change(&mut self) {
-        let change_elder = unwrap!(self.mut_routine_state().change_elder.take());
+        let change_elder = unwrap!(self.routine_state_mut().change_elder.take());
         self.0.action.mark_elder_change(change_elder);
     }
 }
@@ -683,12 +683,12 @@ pub struct ProcessSplit<'a>(pub &'a mut MemberState);
 
 impl<'a> ProcessSplit<'a> {
     pub fn start_event_loop(&mut self) {
-        self.mut_routine_state().is_active = true;
+        self.routine_state_mut().is_active = true;
         self.vote_for_split_sections();
     }
 
     fn exit_event_loop(&mut self) {
-        self.mut_routine_state().is_active = false;
+        self.routine_state_mut().is_active = false;
         self.0
             .as_start_merge_split_and_change_elders()
             .transition_exit_process_split()
@@ -706,7 +706,7 @@ impl<'a> ProcessSplit<'a> {
             return TryResult::Unhandled;
         }
 
-        let wait_votes = &mut self.mut_routine_state().wait_votes;
+        let wait_votes = &mut self.routine_state_mut().wait_votes;
         wait_votes.retain(|wait_vote| wait_vote != vote);
 
         if wait_votes.is_empty() {
@@ -719,7 +719,7 @@ impl<'a> ProcessSplit<'a> {
 
     fn vote_for_split_sections(&mut self) {
         let votes = self.0.action.get_section_split_votes();
-        self.mut_routine_state().wait_votes = votes;
+        self.routine_state_mut().wait_votes = votes;
 
         for vote in &self.routine_state().wait_votes {
             self.0.action.vote_parsec(*vote);
@@ -733,7 +733,7 @@ impl<'a> ProcessSplit<'a> {
             .sub_routine_process_split
     }
 
-    fn mut_routine_state(&mut self) -> &mut ProcessSplitState {
+    fn routine_state_mut(&mut self) -> &mut ProcessSplitState {
         &mut self
             .0
             .start_merge_split_and_change_elders
