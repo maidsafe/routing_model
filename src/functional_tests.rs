@@ -7,8 +7,8 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::{
-    actions::*,
-    state::*,
+    actions::{Action, InnerAction},
+    state::MemberState,
     utilities::{
         Candidate, Event, Node, NodeState, ParsecVote, RelocatedInfo, Rpc, State, TestEvent,
         TryResult,

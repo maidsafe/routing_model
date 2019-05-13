@@ -7,7 +7,7 @@
 // permissions and limitations relating to use of the SAFE Network Software.
 
 use crate::{
-    state::*,
+    state::JoiningState,
     utilities::{
         GenesisPfxInfo, LocalEvent, Name, ProofRequest, RelocatedInfo, Rpc, TryResult, WaitedEvent,
     },
