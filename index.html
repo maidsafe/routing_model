@@ -1136,11 +1136,23 @@
         CheckElderChange(("Check"))
 
         CheckElderChange -- "Otherwise" --> CheckNeedSplit
-
         CheckNeedSplit(("Check"))
-        CheckNeedSplit --"Otherwise" --> RestartTimeout
+
+        CheckNeedSplit --"Otherwise" --> CheckNeedCheckPoint
+        CheckNeedCheckPoint(("Check"))
+
+        CheckNeedCheckPoint --"Otherwise" --> RestartTimeout
         RestartTimeout["schedule(<br />CheckElderTimeout)"]
         RestartTimeout-->LoopEnd
+
+        CheckNeedCheckPoint -- "checkpoint_needed()" --> Concurrent3
+        Concurrent3{"Concurrent<br />paths"}
+        Concurrent3 --> ProcessCheckPoint
+        Concurrent3 --> LoopEnd
+
+        ProcessCheckPoint["ProcessCheckPoint"]
+        style ProcessCheckPoint fill:#f9f,stroke:#333,stroke-width:4px
+        ProcessCheckPoint --> CancelResourceProof
 
         CheckNeedSplit --"split_needed()" --> Concurrent2
         Concurrent2{"Concurrent<br />paths"}
