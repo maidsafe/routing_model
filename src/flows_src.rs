@@ -162,7 +162,7 @@ impl<'a> StartRelocateSrc<'a> {
         {
             self.0.action.send_rpc(Rpc::ExpectCandidate(candidate));
             let inserted = self
-                .mut_routine_state()
+                .routine_state_mut()
                 .already_relocating
                 .insert(candidate, 0);
             assert!(inserted.is_none());
@@ -177,7 +177,7 @@ impl<'a> StartRelocateSrc<'a> {
             .map(|(node, count)| (*node, *count + 1))
             .filter(|(_, count)| *count < 3)
             .collect();
-        self.mut_routine_state().already_relocating = new_already_relocating;
+        self.routine_state_mut().already_relocating = new_already_relocating;
     }
 
     fn check_is_our_relocating_node(&mut self, vote: ParsecVote, candidate: Candidate) {
@@ -194,7 +194,7 @@ impl<'a> StartRelocateSrc<'a> {
 
     fn allow_resend(&mut self, candidate: Candidate) {
         unwrap!(self
-            .mut_routine_state()
+            .routine_state_mut()
             .already_relocating
             .remove(&candidate));
     }
@@ -212,7 +212,7 @@ impl<'a> StartRelocateSrc<'a> {
         &self.0.start_relocate_src
     }
 
-    fn mut_routine_state(&mut self) -> &mut StartRelocateSrcState {
+    fn routine_state_mut(&mut self) -> &mut StartRelocateSrcState {
         &mut self.0.start_relocate_src
     }
 
