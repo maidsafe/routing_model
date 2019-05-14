@@ -1368,13 +1368,13 @@
     </div>
     <div class="mermaid">
         graph TB
-        ProcessElderChange["ProcessElderChange<br />(Take elder changes)<br />(shared state)"]
-        style ProcessElderChange fill:#f9f,stroke:#333,stroke-width:4px
+        ProcessSplit["ProcessSplit<br />(Take elder changes)<br />(shared state)"]
+        style ProcessSplit fill:#f9f,stroke:#333,stroke-width:4px
 
-        EndRoutine["End of ProcessElderChange<br />(shared state)"]
+        EndRoutine["End of ProcessSplit<br />(shared state)"]
         style EndRoutine fill:#f9f,stroke:#333,stroke-width:4px
 
-        ProcessElderChange --> VoteNewSections
+        ProcessSplit --> VoteNewSections
         VoteNewSections["vote_for(Parsec::NewSectionInfo) for the two new sections<br /><br />WAITED_VOTES.insert(all
         votes)"]
         VoteNewSections --> LoopStart

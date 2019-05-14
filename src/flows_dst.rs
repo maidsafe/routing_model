@@ -8,7 +8,7 @@
 
 use crate::{
     state::{
-        MemberState, ProcessElderChangeState, StartRelocatedNodeConnectionState,
+        MemberState, ProcessElderChangeState, ProcessSplitState, StartRelocatedNodeConnectionState,
         StartResourceProofState,
     },
     utilities::{
@@ -492,8 +492,7 @@ impl<'a> StartMergeSplitAndChangeElders<'a> {
             Some(change_elder) => self.concurrent_transition_to_process_elder_change(change_elder),
             None => {
                 if self.split_needed() {
-                    // TODO: -> Concurrent to ProcessSplit
-                    self.0.action.send_rpc(Rpc::Split);
+                    self.concurrent_transition_to_process_split();
                 } else {
                     self.start_check_elder_timeout();
                 }
@@ -505,6 +504,10 @@ impl<'a> StartMergeSplitAndChangeElders<'a> {
         self.0.as_process_merge().start_event_loop()
     }
 
+    fn concurrent_transition_to_process_split(&mut self) {
+        self.0.as_process_split().start_event_loop()
+    }
+
     fn concurrent_transition_to_process_elder_change(&mut self, change_elder: ChangeElder) {
         self.0
             .as_process_elder_change()
@@ -512,6 +515,12 @@ impl<'a> StartMergeSplitAndChangeElders<'a> {
     }
 
     fn transition_exit_process_elder_change(&mut self) {
+        // TODO: ResourceProof_Cancel
+        // TODO: RelocatedNodeConnection_Reset
+        self.start_check_elder_timeout()
+    }
+
+    fn transition_exit_process_split(&self) {
         // TODO: ResourceProof_Cancel
         // TODO: RelocatedNodeConnection_Reset
         self.start_check_elder_timeout()
@@ -666,6 +675,78 @@ impl<'a> ProcessMerge<'a> {
 
     fn update_elder_status(&self) {
         // TODO
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ProcessSplit<'a>(pub &'a mut MemberState);
+
+impl<'a> ProcessSplit<'a> {
+    pub fn start_event_loop(&mut self) {
+        self.mut_routine_state().is_active = true;
+        self.vote_for_split_sections();
+    }
+
+    fn exit_event_loop(&mut self) {
+        self.mut_routine_state().is_active = false;
+        self.0
+            .as_start_merge_split_and_change_elders()
+            .transition_exit_process_split()
+    }
+
+    pub fn try_next(&mut self, event: WaitedEvent) -> TryResult {
+        match event {
+            WaitedEvent::ParsecConsensus(vote) => self.try_consensus(&vote),
+            WaitedEvent::Rpc(_) | WaitedEvent::LocalEvent(_) => TryResult::Unhandled,
+        }
+    }
+
+    fn try_consensus(&mut self, vote: &ParsecVote) -> TryResult {
+        if !self.routine_state().wait_votes.contains(&vote) {
+            return TryResult::Unhandled;
+        }
+
+        let wait_votes = &mut self.mut_routine_state().wait_votes;
+        wait_votes.retain(|wait_vote| wait_vote != vote);
+
+        if wait_votes.is_empty() {
+            self.complete_split();
+            self.mark_elder_change();
+            self.exit_event_loop();
+        }
+        TryResult::Handled
+    }
+
+    fn vote_for_split_sections(&mut self) {
+        let votes = self.0.action.get_section_split_votes();
+        self.mut_routine_state().wait_votes = votes;
+
+        for vote in &self.routine_state().wait_votes {
+            self.0.action.vote_parsec(*vote);
+        }
+    }
+
+    fn routine_state(&self) -> &ProcessSplitState {
+        &self
+            .0
+            .start_merge_split_and_change_elders
+            .sub_routine_process_split
+    }
+
+    fn mut_routine_state(&mut self) -> &mut ProcessSplitState {
+        &mut self
+            .0
+            .start_merge_split_and_change_elders
+            .sub_routine_process_split
+    }
+
+    fn complete_split(&self) {
+        // TODO: start parsec with new genesis ...
+        self.0.action.complete_split();
+    }
+
+    fn mark_elder_change(&mut self) {
+        // TODO: update elder status
     }
 }
 

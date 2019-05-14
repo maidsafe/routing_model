@@ -21,7 +21,14 @@ pub struct ProcessElderChangeState {
 }
 
 #[derive(Debug, PartialEq, Default, Clone)]
+pub struct ProcessSplitState {
+    pub is_active: bool,
+    pub wait_votes: Vec<ParsecVote>,
+}
+
+#[derive(Debug, PartialEq, Default, Clone)]
 pub struct StartMergeSplitAndChangeEldersState {
+    pub sub_routine_process_split: ProcessSplitState,
     pub sub_routine_process_elder_change: ProcessElderChangeState,
     pub sub_routine_process_merge_active: bool,
 }
@@ -65,6 +72,20 @@ impl MemberState {
 
         let event = unwrap!(event.to_waited_event());
 
+        if let TryResult::Handled = self.as_check_online_offline().try_next(event) {
+            return TryResult::Handled;
+        }
+
+        if self
+            .start_merge_split_and_change_elders
+            .sub_routine_process_split
+            .is_active
+        {
+            if let TryResult::Handled = self.as_process_split().try_next(event) {
+                return TryResult::Handled;
+            }
+        }
+
         if self
             .start_merge_split_and_change_elders
             .sub_routine_process_merge_active
@@ -88,10 +109,6 @@ impl MemberState {
             .as_start_merge_split_and_change_elders()
             .try_next(event)
         {
-            return TryResult::Handled;
-        }
-
-        if let TryResult::Handled = self.as_check_online_offline().try_next(event) {
             return TryResult::Handled;
         }
 
@@ -166,6 +183,10 @@ impl MemberState {
 
     pub fn as_process_merge(&mut self) -> ProcessMerge {
         ProcessMerge(self)
+    }
+
+    pub fn as_process_split(&mut self) -> ProcessSplit {
+        ProcessSplit(self)
     }
 
     pub fn as_process_elder_change(&mut self) -> ProcessElderChange {

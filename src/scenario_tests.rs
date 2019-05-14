@@ -107,6 +107,9 @@ const OTHER_SECTION_INFO: SectionInfo = SectionInfo(OTHER_SECTION_1, 0);
 const REMOTE_OTHER_SECTION_INFO: SectionInfo = SectionInfo(OTHER_SECTION_2, 0);
 const MERGED_SECTION_INFO: SectionInfo = SectionInfo(MERGED_SECTION_2, 0);
 
+const SPLIT_SECTION_INFO_1: SectionInfo = SectionInfo(Section(1), 0);
+const SPLIT_SECTION_INFO_2: SectionInfo = SectionInfo(Section(2), 0);
+
 const CANDIDATE_INFO_VALID_1: CandidateInfo = CandidateInfo {
     old_public_id: CANDIDATE_1_OLD,
     new_public_id: CANDIDATE_1,
@@ -959,7 +962,7 @@ mod dst_tests {
     }
 
     #[test]
-    fn parsec_check_elder() {
+    fn parsec_split_needed() {
         run_test(
             "Split if we detect our section needs splitting on CheckElder",
             &initial_state_old_elders(),
@@ -968,7 +971,35 @@ mod dst_tests {
                 ParsecVote::CheckElder.to_event(),
             ],
             &AssertState {
-                action_our_events: vec![Rpc::Split.to_event()],
+                action_our_events: vec![
+                    ParsecVote::NewSectionInfo(SPLIT_SECTION_INFO_1).to_event(),
+                    ParsecVote::NewSectionInfo(SPLIT_SECTION_INFO_2).to_event(),
+                ],
+            },
+        );
+    }
+
+    #[test]
+    fn parsec_split_complete() {
+        let initial_state = arrange_initial_state(
+            &initial_state_old_elders(),
+            &[
+                TestEvent::SetChurnNeeded(ChurnNeeded::Split).to_event(),
+                ParsecVote::CheckElder.to_event(),
+            ],
+        );
+        run_test(
+            "Get consensus on new sections after split and finalise",
+            &initial_state,
+            &[
+                ParsecVote::NewSectionInfo(SPLIT_SECTION_INFO_1).to_event(),
+                ParsecVote::NewSectionInfo(SPLIT_SECTION_INFO_2).to_event(),
+            ],
+            &AssertState {
+                action_our_events: vec![
+                    ActionTriggered::CompleteSplit.to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::TimeoutCheckElder).to_event(),
+                ],
             },
         );
     }
