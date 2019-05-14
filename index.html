@@ -1413,6 +1413,52 @@
         LoopEnd --> LoopStart
     </div>
 
+    <h2>Handling check points</h2>
+    <div class=description>
+        <p>Check point to deal with growing Parsec. Effectively creating a new section with a new Parsec but same members as before.<br />
+        </p>
+        <button class="collapsible">WAITED_VOTES</button>
+        <div class="content">
+            <p>Wait for the vote to reach consensus before reflecting the status change in our chain.<br>
+            </p>
+        </div>
+        <button class="collapsible">complete_check_point</button>
+        <div class="content">
+            <p>With the NewSectionInfo in hands, completing the check point process by joining the new section.
+            </p>
+        </div>
+    </div>
+    <div class="mermaid">
+        graph TB
+        ProcessCheckPoint["ProcessCheckPoint<br />(shared state)"]
+        style ProcessCheckPoint fill:#f9f,stroke:#333,stroke-width:4px
+
+        EndRoutine["End of ProcessCheckPoint<br />(shared state)"]
+        style EndRoutine fill:#f9f,stroke:#333,stroke-width:4px
+
+        ProcessCheckPoint --> VoteNewSections
+        VoteNewSections["vote_for(Parsec::NewSectionInfo) for the new section with a restarted Parsec instance<br /><br />WAITED_VOTES.insert(vote)"]
+        VoteNewSections --> LoopStart
+
+        WaitFor(("Wait for 10:"))
+        LoopStart --> WaitFor
+
+        Consensus((Consensus))
+        WaitFor-- Parsec<br />consensus --> Consensus
+
+        Consensus -- "WAITED_VOTES.contains(vote)" --> OneVoteConsensused
+        OneVoteConsensused["WAITED_VOTES.remove(vote)"]
+
+        OneVoteConsensused --> WaitComplete
+        WaitComplete(("Check?"))
+        WaitComplete--"WAITED_VOTES<br />.is_empty()<br />(Wait complete)"-->CompleteSplit
+        CompleteSplit["complete_check_point()<br />(Start parsec with new genesis...)"]
+        CompleteSplit --> EndRoutine
+
+        WaitComplete--"!WAITED_VOTES<br />.is_empty()<br />(Wait not complete)"--> LoopEnd
+        LoopEnd --> LoopStart
+    </div>
+
     <h2>Handling members of our section going online or offline</h2>
     <div class=description>
         <button class="collapsible">State::RelocatingBackOnline</button>
@@ -1428,7 +1474,7 @@
 
         CheckOnlineOffline --> LoopStart
 
-        WaitFor(("Wait for 10:"))
+        WaitFor(("Wait for 11:"))
         LoopStart --> WaitFor
 
         LocalEvent((Local<br />Event))
