@@ -137,23 +137,10 @@
     <h2>Becoming a full member of a section</h2>
     <div class=description>
         This is from the point of view of a node trying to join a section as a full member.<br />
-        This node is going to try to be accepted as candidate until it receives a Rpc::NodeConnected to complete this
-        stage successfully.<br />
-        This node is going to perform the resource proof until it receives a Rpc::NodeApproval to complete this stage
+        This node is going to connect, send Rpc::CandidateInfo, and then perform the resource proof until it receives a Rpc::NodeApproval to complete this stage
         successfully.<br />
         If the node is not accepted, after time out, it will try another section as a new node.
-        <button class="collapsible">TimeoutResendInfo</button>
-        <div class="content">
-            <p>Timeout triggered to resend messages that have been lost: Either Rpc::CandidateInfo or
-                Rpc::ResourceProofResponse
-            </p>
-        </div>
-        <button class="collapsible">TimeoutConnectRefused</button>
-        <div class="content">
-            <p>Timeout to stop trying to connect if so much time has elapsed that we will not be able to succeed.
-            </p>
-        </div>
-        <button class="collapsible">TimeoutProofRefused</button>
+        <button class="collapsible">TimeoutRefused</button>
         <div class="content">
             <p>Timeout to stop trying to resource proof if so much time has elapsed that we will not be able to succeed.
             </p>
@@ -163,29 +150,6 @@
             <p>Return the next part of the resource proof for the given elder.<br />
                 inputs:<br />
                 - elder name<br />
-            </p>
-        </div>
-        <button class="collapsible">get_resend_resource_proof_part</button>
-        <div class="content">
-            <p>Return the last part of the resource proof for the given elder that we sent.<br />
-                inputs:<br />
-                - elder name<br />
-            </p>
-        </div>
-        <button class="collapsible">get_resource_proof_elders</button>
-        <div class="content">
-            <p>Return all the elders we are currently sending resource proofs to.
-            </p>
-        </div>
-        <button class="collapsible">NEED_RESEND_PROOFS</button>
-        <div class="content">
-            <p>Collection of elders we have not sent a ResourceProofResponse during the timeout.
-            </p>
-        </div>
-        <button class="collapsible">CONNECTED</button>
-        <div class="content">
-            <p>Indicate whether we successfully connected, and if so resend Rpc::ResourceProofResponse instead of
-                Rpc::CandidateInfo.
             </p>
         </div>
         <button class="collapsible">RELOCATED_INFO</button>
@@ -200,9 +164,7 @@
         JoiningRelocateCandidate["JoiningRelocateCandidate<br />(Take RelocatedInfo)"]
         style JoiningRelocateCandidate fill:#f9f,stroke:#333,stroke-width:4px
 
-        InitialSendConnectionInfoRequest["RELOCATED_INFO = RelocatedInfo<br />send_rpc(Rpc::CandidateInfo from
-        RELOCATED_INFO)<br />to target
-        NaeManger<br /><br />schedule(TimeoutResendInfo)<br />schedule(TimeoutConnectRefused)"]
+        InitialSendConnectionInfoRequest["RELOCATED_INFO = RelocatedInfo<br/><br/>For all elders in RelocatedInfo.section_info:<br/>send_rpc(ConnectionInfoRequest)<br/><br/>schedule(TimeoutRefused)"]
         InitialSendConnectionInfoRequest-->LoopStart
 
         LoopStart --> WaitFor
@@ -211,29 +173,11 @@
         WaitFor --> LocalEvent
 
         LocalEvent -- ResourceProofForElderReady --> SendNextResourceProofPartForElder
-
-        LocalEvent--"TimeoutResendInfo triggered"--> CheckResendCandidateInfo
-        CheckResendCandidateInfo((Check))
-
-        CheckResendCandidateInfo -- "Otherwise" --> ResendCandidateInfo
-        ResendCandidateInfo["send_rpc(<br />Rpc::CandidateInfo from RELOCATED_INFO)<br />to target
-        NaeManger<br /><br />schedule(<br />TimeoutResendInfo)"]
-        ResendCandidateInfo --> ScheduleResendTimeoutInfo
-
-        CheckResendCandidateInfo -- "CONNECTED==true" --> ResendProofs
-        ResendProofs["for name in
-        NEED_RESEND_PROOFS:<br />send_rpc(<br />Rpc::ResourceProofResponse{<br />get_resend_resource_proof_part(<br />name)})<br /><br />NEED_RESEND_PROOFS=<br />get_resource_proof_elders()"]
-        ResendProofs --> ScheduleResendTimeoutInfo
-
-        ScheduleResendTimeoutInfo["schedule(<br />TimeoutResendInfo)"]
-        ScheduleResendTimeoutInfo --> LoopEnd
-
-        SendNextResourceProofPartForElder["NEED_RESEND_PROOFS.remove(<br />elder
-        name)<br /><br />send_rpc(<br />Rpc::ResourceProofResponse{<br />get_next_resource_proof_part(<br />elder
+        SendNextResourceProofPartForElder["send_rpc(<br />Rpc::ResourceProofResponse{<br />get_next_resource_proof_part(<br />elder
         name)})"]
         SendNextResourceProofPartForElder --> LoopEnd
 
-        LocalEvent--"TimeoutConnectRefused<br />or<br />TimeoutProofRefused<br />triggered"--> EndRoutine
+        LocalEvent--"TimeoutRefused<br />triggered"--> EndRoutine
         EndRoutine["End of JoiningRelocateCandidate<br />"]
         style EndRoutine fill:#f9f,stroke:#333,stroke-width:4px
 
@@ -241,19 +185,14 @@
         WaitFor --> Rpc
         Rpc -- Rpc::NodeApproval --> EndRoutine
 
-        Rpc -- Rpc::NodeConnected --> NodeConnected
-        NodeConnected["kill_scheduled(TimeoutConnectRefused)><br />CONNECTED=true"]
-        NodeConnected-->LoopEnd
-
-        Rpc -- Rpc::ConnectionInfoRequest --> OnConnectionInfoRequest
-        OnConnectionInfoRequest["send_rpc(<br />Rpc::ConnectionInfoResponse)"]
-        OnConnectionInfoRequest-->LoopEnd
+        Rpc -- ConnectionInfoResponse --> ConnectAndSendCandidateInfo
+        ConnectAndSendCandidateInfo["send_rpc(<br/>Rpc::CandidateInfo from RELOCATED_INFO)"]
+        ConnectAndSendCandidateInfo-->LoopEnd
 
         Rpc -- Rpc::ResourceProofReceipt --> SendNextResourceProofPartForElder
 
         Rpc -- Rpc::ResourceProof --> StartComputeResourceProofForElder
-        StartComputeResourceProofForElder["start_compute_resource_proof(source
-        elder)<br /><br />schedule(TimeoutProofRefused)"]
+        StartComputeResourceProofForElder["start_compute_resource_proof(<br />source elder)"]
         StartComputeResourceProofForElder --> LoopEnd
 
         Rpc --
@@ -382,6 +321,16 @@
                 get_waiting_candidate_info.
             </p>
         </div>
+        <button class="collapsible">shorter_prefix_section</button>
+        <div class="content">
+            <p>If we know of a section that has a shorter prefix than ours, we prefer for them to receive this incoming
+                node rather than ourselves as it will help keep the Network's sections tree balanced.<br />
+                This shorter_prefix_section is a function that will return None if we are the shortest of any section we
+                know, Some if there is a better candidate.<br />
+                If it is Some, we will relocate the new node to them instead of completing the relocation to our own
+                section.
+            </p>
+        </div>
     </div>
     <div class="mermaid">
         graph TB
@@ -408,9 +357,15 @@
         VoteParsecExpectCandidate --> LoopEnd
 
         Balanced(("Check"))
-        Balanced -- "get_waiting_candidate_info(candidate).is_some()" --> SendIdenticalExpectCandidateAcceptResponse
-        Balanced -- "count_waiting_proofing_or_hop()==0" --> SendExpectCandidateAcceptResponse
-        Balanced -- "Otherwise" --> SendRefuse
+        Balanced -- "shorter_prefix_section(<br />).is_some()" --> RelocateToShorterPrefix
+        RelocateToShorterPrefix["send_rpc(<br />Rpc::ExpectCandidate)<br />to shorter prefix section"]
+        RelocateToShorterPrefix --> LoopEnd
+
+        Balanced -- "Otherwise" --> HasCandidate
+        HasCandidate(("Check"))
+        HasCandidate -- "get_waiting_candidate_info(candidate).is_some()" --> SendIdenticalExpectCandidateAcceptResponse
+        HasCandidate -- "count_waiting_proofing_or_hop()==0" --> SendExpectCandidateAcceptResponse
+        HasCandidate -- "Otherwise" --> SendRefuse
 
         SendIdenticalExpectCandidateAcceptResponse["send_rpc(<br />Rpc::ExpectCandidateAcceptResponse)<br />again to
         source section<br />with original info<br />get_waiting_candidate_info(candidate)"]
@@ -426,188 +381,13 @@
 
     </div>
 
-    <h2>Relocated node connection</h2>
-    <div class=description>
-        <p>Manage node with NodeState=State::WaitingCandidateInfo and connection info request/response RPCs.<br />
-            The candidate sends its CandidateInfo to the NaeManager of the target interval to ensure it reaches the
-            section even in the event of a split or a merge.<br />
-            This target interval address could be the middle address of the interval, and the interval should cover a
-            range that will not be split if the section splits.<br />
-            When we complete, we either stop responding to Rpc::CandidateInfo RPCs if it failed, or we send
-            Rpc::NodeConnected on success,<br />
-            (We could also omit Rpc::NodeConnected, the node would continue sending CandidateInfo until
-            Rpc::ResourceProof or time out).<br />
-            When the node reaches State::WaitingProofing or State::RelocatingHop state, the section becomes responsible
-            for managing communication with this node as it would any of its adults.<br />
-            <br />
-            Re-insert Parsec::CandidateConnected in case of prefix change (i.e split/merge + checkpoint), and
-            CANDIDATES_INFO/CANDIDATES_VOTED should be kept.
-            Do not re-insert votes for which is_valid_waited_info is false (discarded candidates will never reach
-            consensus).
-            (Alternatively could always discard votes on prefix change and clear CANDIDATES_INFO/CANDIDATES_VOTED)
-        </p>
-        <button class="collapsible">is_valid_waited_info</button>
-        <div class="content">
-            <p>Return true if
-                <ul>
-                    <li> The given CandidateInfo is valid,
-                    <li> It matches one of our nodes that is in the State::WaitingCandidateInfo state,
-                    <li> The message_src (from the current RPC) is consistent with the CandidateInfo's new_public_id
-                </ul>
-            </p>
-        </div>
-        <button class="collapsible">shorter_prefix_section</button>
-        <div class="content">
-            <p>If we know of a section that has a shorter prefix than ours, we prefer for them to receive this incoming
-                node rather than ourselves as it will help keep the Network's sections tree balanced.<br />
-                This shorter_prefix_section is a function that will return None if we are the shortest of any section we
-                know, Some if there is a better candidate.<br />
-                If it is Some, we will relocate the new node to them instead of completing the relocation to our own
-                section.
-            </p>
-        </div>
-        <button class="collapsible">update_to_node</button>
-        <div class="content">
-            <p>Convert the candidate node at the target interval address to a node using the new_public_id from the
-                given CandidateInfo.
-                Update the state of the node with the given state.
-            </p>
-        </div>
-        <button class="collapsible">State::RelocatingHop</button>
-        <div class="content">
-            <p>A nodes state indicating that it is relocated without ageing further.<br />
-                Also counted as part of count_waiting_proofing_or_hop().
-            </p>
-        </div>
-        <button class="collapsible">CANDIDATES</button>
-        <div class="content">
-            <p>Collection of candidate that we will purge if they are still in State::WaitingCandidateInfo next time
-                Parsec::CheckRelocatedNodeConnection is consensused.
-            </p>
-        </div>
-        <button class="collapsible">CANDIDATES_INFO</button>
-        <div class="content">
-            <p>Collection of CandidateInfo keyed by CandidateInfo.new_public_id.<br />
-                For all items, only keep if is_valid_waited_info(info)==true.
-            </p>
-        </div>
-        <button class="collapsible">CANDIDATES_VOTED</button>
-        <div class="content">
-            <p>Collection of candidates CandidateInfo.new_public_id that we have voted for as connected<br />
-                For all items, only keep if also kept in CANDIDATES_INFO.
-            </p>
-        </div>
-        <button class="collapsible">RelocatedNodeConnection_Reset</button>
-        <div class="content">
-            <p>Provides and external entry point to reset the currently processed nodes: Do not reject a node because it
-                took longer than expected.<br />
-                This will be called for example after merge/split as the new nodes would become voters.
-            </p>
-        </div>
-    </div>
-    <div class="mermaid">
-        graph TB
-        RelocatedNodeConnection["StartRelocatedNodeConnection"]
-        style RelocatedNodeConnection fill:#f9f,stroke:#333,stroke-width:4px
-
-        RelocatedNodeConnection --> StartCheckRelocatedNodeConnectionTimeout
-        StartCheckRelocatedNodeConnectionTimeout["schedule(<br />CheckRelocatedNodeConnectionTimeout)"]
-        StartCheckRelocatedNodeConnectionTimeout --> LoopStart
-
-        WaitFor(("Wait for 2:"))
-
-        LoopStart-->WaitFor
-
-        WaitFor -- Parsec<br />consensus--> ParsecConsensus
-        ParsecConsensus((Consensus))
-
-        ParsecConsensus -- "Parsec::CheckRelocatedNodeConnection" --> CleanCandidates
-        CleanCandidates["for candidate in
-        both<br />-waiting_nodes_connecting()<br />-CANDIDATES:<br /><br />purge_node_info(candidate)<br /><br />CANDIDATES_INFO<br />.retain(|(k,v)|is_valid_waited_info(v))<br />CANDIDATES_VOTED<br />.retain(|src|
-        CANDIDATES_INFO.contains_key(src))<br />CANDIDATES=waiting_nodes_connecting()<br /><br />(reject candidates that
-        took too long)"]
-        CleanCandidates --> ReStartCheckRelocatedNodeConnectionTimeout
-        ReStartCheckRelocatedNodeConnectionTimeout["schedule(<br />CheckRelocatedNodeConnectionTimeout)"]
-        ReStartCheckRelocatedNodeConnectionTimeout --> LoopEnd
-
-        ParsecConsensus -- "Parsec::CandidateConnected" --> CheckValidConnected
-        CheckValidConnected((Check))
-        CheckValidConnected -- "is_valid_waited_info(<br />Parsec::CandidateConnected info)" --> Balanced
-
-        Balanced(("Check"))
-        Balanced -- "shorter_prefix_section(<br />).is_some()" --> RelocateToShorterPrefix
-        RelocateToShorterPrefix["update_to_node(<br />Parsec::CandidateConnected info,<br />State::RelocatingHop)"]
-        RelocateToShorterPrefix --> SetConnected
-
-        Balanced -- "Otherwise" --> SetWaitingProof
-        SetWaitingProof["update_to_node(<br />Parsec::CandidateConnected info,<br />State::WaitingProofing)"]
-        SetWaitingProof --> SetConnected
-
-        SetConnected["send_rpc(<br />Rpc::NodeConnected)<br /><br />(All communications now<br />managed by elder
-        like<br />for other adults)"]
-        SetConnected --> LoopEnd
-
-        CheckValidConnected -- "Otherwise" --> LoopEnd
-
-        RPC((RPC))
-        WaitFor --"RPC"--> RPC
-        RPC -- "Rpc::CandidateInfo" --> CheckCandidateInfo
-        CheckCandidateInfo((Check))
-
-        CheckCandidateInfo -- "Otherwise" --> DiscardRPC
-        DiscardRPC[Discard RPC]
-        DiscardRPC --> LoopEnd
-
-        CheckCandidateInfo -- "is_valid_waited_info(<br />CandidateInfo)" --> SendConnectionInfoRequest
-        SendConnectionInfoRequest["CANDIDATES_INFO<br />.insert_if_not_exists(<br />CandidateInfo.new_public_id,<br />CandidateInfo
-        info)<br /><br />send_rpc(<br />Rpc::ConnectionInfoRequest)<br /><br />(cache candidate info and<br />send
-        connect info)"]
-        SendConnectionInfoRequest --> LoopEnd
-
-        RPC --
-        "Rpc::ConnectionInfoResponse<br />and<br />CANDIDATES_INFO<br />.contains_key(message_src)<br />and<br />!CANDIDATES_VOTED<br />.contains(message_src)"
-        --> ConnectCandidate
-        ConnectCandidate["connect_to_candidate(<br />ConnectionInfoResponse
-        info)<br /><br />vote_for(<br />Parsec::CandidateConnected{<br />CANDIDATES_INFO.get(message_src)})<br /><br />CANDIDATES_VOTED.insert(message_src)<br /><br />(connect
-        and vote for<br />candidate connected)"]
-        ConnectCandidate --> LoopEnd
-
-        WaitFor --Event--> Event
-        Event((Event))
-
-        VoteParsecCheckRelocatedNodeConnection["vote_for(<br />Parsec::CheckRelocatedNodeConnection)"]
-        Event -- CheckRelocatedNodeConnectionTimeout<br />expire --> VoteParsecCheckRelocatedNodeConnection
-        VoteParsecCheckRelocatedNodeConnection --> LoopEnd
-        LoopEnd --> LoopStart
-
-    </div>
-    <div class="mermaid">
-        graph TB
-
-        Reset["RelocatedNodeConnection_Reset"]
-        style Reset fill:#19f,stroke:#333,stroke-width:4px
-
-        EndReset["End RelocatedNodeConnection_Reset"]
-        style EndReset fill:#19f,stroke:#333,stroke-width:4px
-
-        Reset --> ClearCandidates
-        ClearCandidates["CANDIDATES.clear()<br /><br />(Give time for new elder to catch up)"]
-        ClearCandidates --> EndReset
-    </div>
-
     <h2>Resource proof from a destination's point of view</h2>
     <div class=description>
-        <p>In the previous diagram, we ensured an incoming candidate would only reach the "State::WaitingProofing" state
-            once it was connected to our section and able to communicate with its elders. At this stage, the node would
-            be a member of our peer_list.<br />
-            This is maintained across merge/split as for any adult node, so we are ready to resource proof any node in
-            State::WaitingProofing state<br />
+        <p>Manage node with NodeState=State::WaitingCandidateInfo.<br />
+           This is the start of the resource proof intiated by cal to ResourceProof_Start.<br />
+           We only process up to one resource proof at a time.<br />
             <br />
-            This leads us here: to the resource proof.<br />
-            We only process up to one resource proof at a time (i.e: we wait for the current resource proof to reach
-            completion before scheduling a new one).<br />
-            When we periodically decide to resource proof a node, we check if any node is ready for it:
-            State::WaitingProofing state, and pick the best candidate (There may be multiple after a merge).<br />
+            Once the candidate is connected, it sends its CandidateInfo to each Elders it was given in RelocatedInfo.<br />
             As an elder, I will send the candidate a Rpc::ResourceProof. This gives them the "problem to solve". As they
             solve it, they will send me ResourceProofResponses. These will be parts of the proof. On receiving valid
             parts, I must send a ResourceProofReceipt. Once they finally send me the last valid part, they passed their
@@ -621,12 +401,25 @@
             Offline, we will be able to detect they are Offline later with the standard Offline detection mechanism. But
             it is more likely that they took close to the time limit to complete their proof.
         </p>
+        <button class="collapsible">is_valid_waited_info</button>
+        <div class="content">
+            <p>Return true if
+                <ul>
+                    <li> The given CandidateInfo is valid,
+                    <li> It matches one of our nodes that is in the State::WaitingCandidateInfo state,
+                    <li> The message_src (from the current RPC) is consistent with the CandidateInfo's new_public_id
+                </ul>
+            </p>
+        </div>
+        <button class="collapsible">resource_proof_candidate</button>
+        <div class="content">
+            <p>Return a candidate ready to be resource proofed (First node in State::WaitingCandidateInfo state)
+            </p>
+        </div>
         <button class="collapsible">CANDIDATE</button>
         <div class="content">
-            <p>Option&lt(Candidate, Nonce)&gt.<br />
-                The candidate we are currently resource proofing, if any.<br />
-                The nonce is used to distinguish new attempts of resource proofing the same candidate after a merge or a
-                split.
+            <p>Option&lt(Candidate)&gt.<br />
+               The candidate we are currently resource proofing old_public_id, if any.
             </p>
         </div>
         <button class="collapsible">VOTED_ONLINE</button>
@@ -650,7 +443,12 @@
                 If it's the case, we only want to process the first of these two events and discard the other one.
             </p>
         </div>
-        <button class="collapsible">ResourceProof_Cancel</button>
+        <button class="collapsible">ResourceProof_Start</button>
+        <div class="content">
+            <p>Provides an external entry point to start with a new available node.
+               Called when we accept a new candidate.
+            </p>
+        </div>        <button class="collapsible">ResourceProof_Cancel</button>
         <div class="content">
             <p>Provides an external entry point to cancel the currently processed nodes: Restart the resource proofing
                 with all involved voters.<br />
@@ -663,9 +461,7 @@
         ResourceProof["StartResourceProof"]
         style ResourceProof fill:#f9f,stroke:#333,stroke-width:4px
 
-        ResourceProof --> StartCheckResourceProofTimeout
-        StartCheckResourceProofTimeout["schedule(<br />CheckResourceProofTimeout)"]
-        StartCheckResourceProofTimeout --> LoopStart
+        ResourceProof --> LoopStart
 
         WaitFor(("Wait for 3:"))
 
@@ -685,32 +481,35 @@
         MakeOnline --> ReStartCheckResourceProofTimeout
 
         ParsecConsensus -- "Parsec::CheckResourceProof" --> SetCandidate
-        SetCandidate["CANDIDATE=resource_proof_candidate()<br /><br />(Best node with
-        NodeState=State::WaitingProofing)"]
+        SetCandidate["CANDIDATE=resource_proof_candidate()"]
         SetCandidate -->CheckRequestRP
 
         CheckRequestRP((Check))
         CheckRequestRP --"Otherwise" --> ReStartCheckResourceProofTimeout
-        ReStartCheckResourceProofTimeout["CANDIDATE=None<br />VOTED_ONLINE==no<br /><br />schedule(<br />CheckResourceProofTimeout)"]
+        ReStartCheckResourceProofTimeout["CANDIDATE=None<br />CANDIDATE_INFO=None<br/>VOTED_ONLINE==no<br /><br />schedule(<br />CheckResourceProofTimeout)"]
         ReStartCheckResourceProofTimeout --> LoopEnd
 
-        CheckRequestRP --"CANDIDATE.is_some()"-->RequestRP
-        RequestRP["send_rpc(<br />Rpc::ResourceProof)<br />to CANDIDATE<br /><br />schedule(TimeoutAccept)"]
-        RequestRP --> LoopEnd
-
+        CheckRequestRP --"CANDIDATE.is_some()"--> ScheduleTimer
+        ScheduleTimer["schedule(<br />TimeoutAccept)"]
+        ScheduleTimer --> LoopEnd
 
         RPC((RPC))
         WaitFor --RPC--> RPC
-        RPC -- Rpc::ResourceProofResponse<br />from CANDIDATE --> ProofResponse((Proof))
+        RPC -- "Rpc::CandidateInfo<br/>and<br/>is_valid_waited_info(<br/>CandidateInfo)<br/>and<br/>CANDIDATE==<br/>CandidateInfo.old_public_id" --> RequestRP
+        RequestRP["CANDIDATE_INFO=<br/>Some(CandidateInfo)<br/><br/>send_rpc(<br />Rpc::ResourceProof)<br />to CANDIDATE_INFO.new_public_id"]
+        RequestRP --> LoopEnd
+
+        RPC -- Rpc::ResourceProofResponse<br />from CANDIDATE_INFO --> ProofResponse((Proof))
         ProofResponse((Check))
         SendProofReceipt["send_rpc(<br />Rpc::ResourceProofReceipt)<br />for proof"]
         ProofResponse -- "Valid Part or End<br />otherwise" --> SendProofReceipt
         VoteParsecOnline["vote_for(<br />Parsec::Online)<br /><br />VOTED_ONLINE=yes"]
         ProofResponse -- "Valid End<br />and<br />VOTED_ONLINE==no" --> VoteParsecOnline
-
+        VoteParsecOnline --> SendProofReceipt
+        SendProofReceipt-->LoopEnd
 
         DiscardRPC[Discard RPC]
-        RPC -- Rpc::ResourceProofResponse<br />otherwise --> DiscardRPC
+        RPC -- "Rpc::CandidateInfo<br/>or<br/>Rpc::ResourceProofResponse<br/>otherwise" --> DiscardRPC
         DiscardRPC --> LoopEnd
 
         WaitFor --Event--> Event
@@ -722,9 +521,6 @@
         Event -- CheckResourceProofTimeout<br />expire --> VoteParsecCheckResourceProofTimeout
         VoteParsecCheckResourceProofTimeout --> LoopEnd
 
-
-        VoteParsecOnline --> SendProofReceipt
-        SendProofReceipt-->LoopEnd
         VoteParsecPurgeCandidate --> LoopEnd
         LoopEnd --> LoopStart
 
@@ -739,7 +535,7 @@
         style EndCancel fill:#19f,stroke:#333,stroke-width:4px
 
         Cancel --> CancelCheckResourceProofTimeout
-        CancelCheckResourceProofTimeout["CANDIDATE=None<br />VOTED_ONLINE==no<br /><br />schedule(<br />CheckResourceProofTimeout)"]
+        CancelCheckResourceProofTimeout["CANDIDATE=None<br />CANDIDATE_INFO=None<br/>VOTED_ONLINE==no<br/><br />purge_node_info(CANDIDATE)<br />schedule(<br />CheckResourceProofTimeout)"]
         CancelCheckResourceProofTimeout --> EndCancel
     </div>
 
@@ -1015,6 +811,37 @@
     </div>
 
     <h1>Elder-only</h1>
+
+    <h2>Process handling connections</h2>
+    <div class=description>
+        <p>This flow handle receiving connection requests. It will also handle establishing connections in the future.<br />
+        </p>
+
+        <button class="collapsible">ConnectionInfoRequest/ConnectionInfoResponse</button>
+        <div class="content">
+            <p>Sent to collect information needed to establish a direct connection: Unchanged
+            </p>
+        </div>
+    </div>
+    <div class="mermaid">
+        graph TB
+        StartConnectionHandler["StartConnectionHandler:<br />No exit - Needs killed"]
+        style StartConnectionHandler fill:#f9f,stroke:#333,stroke-width:4px
+
+        StartConnectionHandler --> LoopStart
+        LoopStart --> WaitFor
+
+        WaitFor((Wait for 6:))
+        WaitFor --RPC--> RPC
+
+        RPC -- Rpc::ConnectionInfoRequest --> OnConnectionInfoRequest
+        OnConnectionInfoRequest["send_rpc(<br />Rpc::ConnectionInfoResponse)"]
+        OnConnectionInfoRequest --> LoopEnd
+
+        LoopEnd --> LoopStart
+    </div>
+
+
     <h2>Process for Adult/Elder promotion and demotion including merge</h2>
     <div class=description>
         <p>This flow updates the elder status of our section nodes if needed.<br />
