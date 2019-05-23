@@ -10,8 +10,8 @@ use crate::{
     actions::{Action, InnerAction},
     state::MemberState,
     utilities::{
-        Candidate, Event, Node, NodeState, ParsecVote, RelocatedInfo, Rpc, State, TestEvent,
-        TryResult,
+        Candidate, CandidateInfo, Event, Node, NodeState, ParsecVote, Proof, RelocatedInfo, Rpc,
+        State, TestEvent, TryResult,
     },
 };
 use rand::{self, seq::SliceRandom, Rng, SeedableRng};
@@ -122,4 +122,97 @@ fn relocate_adult_src() {
         .is_none());
 
     optional_random_events.handle(&mut member_state, &mut rng);
+}
+
+#[test]
+fn relocate_adult_dst() {
+    let mut rng = get_rng();
+
+    let dst_nodes = iter::repeat_with(|| rng.gen())
+        .take(6)
+        .collect::<Vec<Node>>();
+
+    let action = Action::new(
+        InnerAction::new_with_our_attributes(rng.gen())
+            .with_next_target_interval(rng.gen())
+            .extend_current_nodes_with(&NodeState::default_elder(), &dst_nodes),
+    );
+    let dst_name = action.our_name();
+
+    // Sort into elders and adults.
+    let to_become_adults = unwrap!(action.check_elder());
+    action.mark_elder_change(to_become_adults);
+
+    let mut member_state = MemberState {
+        action,
+        ..Default::default()
+    };
+
+    let candidate = Candidate(rng.gen());
+    let mut old_public_id = candidate;
+    old_public_id.0.age.0 -= 1;
+
+    let candidate_info = CandidateInfo {
+        old_public_id,
+        new_public_id: candidate,
+        destination: member_state.action.inner().next_target_interval,
+        valid: true,
+    };
+
+    let required_events = [
+        ParsecVote::ExpectCandidate(candidate).to_event(),
+        ParsecVote::CandidateConnected(candidate_info).to_event(),
+        ParsecVote::CheckResourceProof.to_event(),
+        ParsecVote::Online(candidate).to_event(),
+        ParsecVote::CheckElder.to_event(),
+    ];
+
+    let optional_any_time = RandomEvents(vec![
+        ParsecVote::WorkUnitIncrement.to_event(),
+        ParsecVote::CheckRelocate.to_event(),
+        Rpc::ExpectCandidate(candidate).to_event(),
+    ]);
+
+    let optional_after_expect_candidate = RandomEvents(vec![
+        Rpc::CandidateInfo(candidate_info).to_event(),
+        Rpc::ConnectionInfoResponse {
+            source: rng.gen(),
+            destination: dst_name,
+            connection_info: rng.gen(),
+        }
+        .to_event(),
+    ]);
+
+    let optional_after_check_resource_proof = RandomEvents(vec![Rpc::ResourceProofResponse {
+        candidate: candidate,
+        destination: dst_name,
+        proof: Proof::ValidPart,
+    }
+    .to_event()]);
+
+    for (i, required_event) in required_events.iter().enumerate() {
+        assert_eq!(TryResult::Handled, member_state.try_next(*required_event));
+        optional_any_time.handle(&mut member_state, &mut rng);
+        if i > 0 {
+            optional_after_expect_candidate.handle(&mut member_state, &mut rng);
+        }
+        if i > 2 {
+            optional_after_check_resource_proof.handle(&mut member_state, &mut rng);
+        }
+    }
+
+    assert!(member_state
+        .action
+        .inner()
+        .our_current_nodes
+        .contains_key(&candidate.name()));
+
+    assert_eq!(
+        State::Online,
+        unwrap!(member_state.action.node_state(candidate.name())).state
+    );
+
+    optional_any_time.handle(&mut member_state, &mut rng);
+    optional_after_expect_candidate.handle(&mut member_state, &mut rng);
+    optional_after_check_resource_proof.handle(&mut member_state, &mut rng);
 }
