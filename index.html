@@ -290,10 +290,6 @@
         ConcurrentStartDst --> StartRespondToRelocateRequests
         style StartRespondToRelocateRequests fill:#f9f,stroke:#333,stroke-width:4px
 
-        ConcurrentStartDst --> StartRelocatedNodeConnection
-        StartRelocatedNodeConnection[StartRelocatedNodeConnection]
-        style StartRelocatedNodeConnection fill:#f9f,stroke:#333,stroke-width:4px
-
         ConcurrentStartDst --> StartResourceProof
         StartResourceProof[StartResourceProof]
         style StartResourceProof fill:#f9f,stroke:#333,stroke-width:4px
@@ -303,6 +299,9 @@
 
         ConcurrentStartElder --> CheckOnlineOffline
         style CheckOnlineOffline fill:#f9f,stroke:#333,stroke-width:4px
+
+        ConcurrentStartElder --> StartConnectionHandler
+        style StartConnectionHandler fill:#f9f,stroke:#333,stroke-width:4px
 
         ConcurrentStartElder --> WaitFor
 
@@ -424,8 +423,8 @@
     <h2>Resource proof from a destination's point of view</h2>
     <div class=description>
         <p>Manage node with NodeState=State::WaitingCandidateInfo.<br />
-           This is the start of the resource proof intiated by cal to ResourceProof_Start.<br />
-           We only process up to one resource proof at a time.<br />
+           When we periodically decide to resource proof a node, we check if any node is ready for it:
+           State::WaitingCandidateInfo state.<br />
             <br />
             Once the candidate is connected, it sends its CandidateInfo to each Elders it was given in RelocatedInfo.<br />
             As an elder, I will send the candidate a Rpc::ResourceProof. This gives them the "problem to solve". As they
@@ -483,12 +482,7 @@
                 If it's the case, we only want to process the first of these two events and discard the other one.
             </p>
         </div>
-        <button class="collapsible">ResourceProof_Start</button>
-        <div class="content">
-            <p>Provides an external entry point to start with a new available node.
-               Called when we accept a new candidate.
-            </p>
-        </div>        <button class="collapsible">ResourceProof_Cancel</button>
+        <button class="collapsible">ResourceProof_Cancel</button>
         <div class="content">
             <p>Provides an external entry point to cancel the currently processed nodes: Restart the resource proofing
                 with all involved voters.<br />
@@ -854,7 +848,7 @@
 
     <h2>Process handling connections</h2>
     <div class=description>
-        <p>This flow handle receiving connection requests. It will also handle establishing connections in the future.<br />
+        <p>This flow handles receiving connection requests. It will also handle establishing connections in the future.<br />
         </p>
 
         <button class="collapsible">ConnectionInfoRequest/ConnectionInfoResponse</button>
@@ -1348,7 +1342,7 @@
                 Contains:<br />
                 <ul>
                     <li>target_interval: (XorName, XorName) - The interval into which the joining node should join.<br>
-                    <li>section_info: SectionInfo - The destination section that the joining node will trust.<br>
+                    <li>section_info: SectionInfo - The destination section that the joining node will trust and connect to.<br>
                     <li>proof: Signatures - Quorum of signature for the candidate to prove the source section relocated
                         it with these infos.<br>
                 </ul>
@@ -1356,7 +1350,7 @@
         </div>
         <button class="collapsible">CandidateInfo</button>
         <div class="content">
-            <p>Sent by the joining node to the target interval's NaeManager to initiate the joining process<br />
+            <p>Sent by the joining node to each elders of the section it is joining to initiate the joining process<br />
                 Contains:<br />
                 <ul>
                     <li>old_public_id: PublicId - PublicId from before relocation.<br>
@@ -1377,21 +1371,9 @@
             <p>Sent to collect information needed to establish a direct connection: Unchanged
             </p>
         </div>
-        <button class="collapsible">NodeConnected</button>
-        <div class="content">
-            <p>Sent by the destination section to the joining node when connected<br />
-                Contains:<br />
-                <ul>
-                    <li>section_info_proofs: Vec&lt(SectionInfo, ProofSet)&gt - Signed section infos with root starting
-                        with the stored SectionInfo in the candidate node state.<br>
-                    <li>current_info: GenesisPfxInfo - All the info needed when this node becomes an adult or elder.<br>
-                </ul>
-            </p>
-        </div>
         <button class="collapsible">ResourceProof/ResourceProofResponse/ResourceProofReceipt</button>
         <div class="content">
             <p>Sent to process resource proof: Unchanged<br />
-                (Could avoid some malicious behaviour with nonce/counter/proofs that we started resource proof).
             </p>
         </div>
         <button class="collapsible">NodeApproval</button>
@@ -1419,11 +1401,10 @@
         Src->>Node: Direct node-to-node RPC: Rpc::RelocatedInfo
 
         loop NodeConnection
-        Node->>Dst: Proxied Routing RPC to group: Rpc::CandidateInfo
-        Dst->>+Node: Proxied Routing RPC: Rpc::ConnectionInfoRequest
-        Node-->>-Dst: Proxied Routing RPC: Rpc::ConnectionInfoResponse
+        Node->>+Dst: Proxied Routing RPC: Rpc::ConnectionInfoRequest
+        Dst-->>-Node: Proxied Routing RPC: Rpc::ConnectionInfoResponse
+        Node->>Dst: Direct node-to-node RPC to group: Rpc::CandidateInfo
         end
-        Dst->>Node: Unproxied Group RPC: Rpc::NodeConnected
 
         Dst->>Node: Direct node-to-node RPC: Rpc::ResourceProof
         loop ResProof
