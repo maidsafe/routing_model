@@ -14,7 +14,7 @@ use crate::utilities::{
 use itertools::Itertools;
 use std::{
     cell::RefCell,
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     fmt::{self, Debug, Formatter},
     rc::Rc,
 };
@@ -251,28 +251,13 @@ impl Action {
         info
     }
 
-    pub fn update_to_node_with_waiting_proof_state(&self, info: CandidateInfo) {
-        self.update_to_node(info, State::WaitingProofing);
-    }
-
-    pub fn update_to_node_with_relocating_hop_state(&self, info: CandidateInfo) {
-        self.update_to_node(info, State::RelocatingHop);
-    }
-
-    fn update_to_node(&self, info: CandidateInfo, state: State) {
+    pub fn set_candidate_online_state(&self, candidate_name: Name, new_public_id: Candidate) {
         let state = NodeState {
-            node: Node(info.new_public_id.0),
-            state,
+            node: Node(new_public_id.0),
+            state: State::Online,
             ..NodeState::default()
         };
-
-        self.0.borrow_mut().replace_node(info.destination, state);
-    }
-
-    pub fn set_candidate_online_state(&self, candidate: Candidate) {
-        self.0
-            .borrow_mut()
-            .set_node_state(candidate.name(), State::Online);
+        self.0.borrow_mut().replace_node(candidate_name, state);
     }
 
     pub fn set_node_offline_state(&self, node: Node) {
@@ -442,18 +427,6 @@ impl Action {
             .unwrap_or(false)
     }
 
-    pub fn waiting_nodes_connecting(&self) -> BTreeSet<Name> {
-        self.0
-            .borrow()
-            .our_current_nodes
-            .iter()
-            .filter_map(|(name, state)| match state.state {
-                State::WaitingCandidateInfo(_) => Some(*name),
-                _ => None,
-            })
-            .collect()
-    }
-
     pub fn get_waiting_candidate_info(&self, candidate: Candidate) -> Option<RelocatedInfo> {
         self.0
             .borrow()
@@ -475,13 +448,14 @@ impl Action {
             .count()
     }
 
-    pub fn resource_proof_candidate(&self) -> Option<Candidate> {
+    pub fn resource_proof_candidate(&self) -> Option<(Name, Candidate)> {
         self.0
             .borrow()
             .our_current_nodes
-            .values()
-            .filter(|state| state.state.is_resource_proofing())
-            .map(|state| Candidate(state.node.0))
+            .iter()
+            .map(|(name, state)| (name, state.state.waiting_candidate_info()))
+            .filter_map(|(name, info)| info.map(|info| (name, info)))
+            .map(|(name, info)| (*name, info.old_public_id()))
             .next()
     }
 
@@ -494,7 +468,7 @@ impl Action {
             .borrow()
             .our_current_nodes
             .get(&info.destination)
-            .map(|state| state.state.is_waiting_candidate_info())
+            .map(|state| state.state.waiting_candidate_info().is_some())
             .unwrap_or(false)
     }
 
@@ -521,11 +495,6 @@ impl Action {
 
     pub fn send_relocate_response_rpc(&self, info: RelocatedInfo) {
         self.send_rpc(Rpc::RelocateResponse(info));
-    }
-
-    pub fn send_node_connected(&self, candidate: Candidate) {
-        let section = GenesisPfxInfo(self.0.borrow().our_section);
-        self.send_rpc(Rpc::NodeConnected(candidate, section));
     }
 
     pub fn send_candidate_proof_request(&self, candidate: Candidate) {
@@ -572,6 +541,7 @@ impl Action {
             .and_then(|proof_source| proof_source.resend())
     }
 
+    #[allow(dead_code)]
     pub fn send_connection_info_request(&self, destination: Name) {
         let source = self.our_name();
         self.send_rpc(Rpc::ConnectionInfoRequest {

@@ -148,29 +148,31 @@ fn relocate_adult_dst() {
         ..Default::default()
     };
 
-    let candidate = Candidate(rng.gen());
-    let mut old_public_id = candidate;
-    old_public_id.0.age.0 -= 1;
+    let old_public_id = Candidate(rng.gen());
+    let new_public_id = {
+        let mut new_public_id = Candidate(rng.gen());
+        new_public_id.0.age.0 = old_public_id.0.age.0 + 1;
+        new_public_id
+    };
 
     let candidate_info = CandidateInfo {
         old_public_id,
-        new_public_id: candidate,
+        new_public_id,
         destination: member_state.action.inner().next_target_interval,
         valid: true,
     };
 
     let required_events = [
-        ParsecVote::ExpectCandidate(candidate).to_event(),
-        ParsecVote::CandidateConnected(candidate_info).to_event(),
+        ParsecVote::ExpectCandidate(old_public_id).to_event(),
         ParsecVote::CheckResourceProof.to_event(),
-        ParsecVote::Online(candidate).to_event(),
+        ParsecVote::Online(old_public_id, new_public_id).to_event(),
         ParsecVote::CheckElder.to_event(),
     ];
 
     let optional_any_time = RandomEvents(vec![
         ParsecVote::WorkUnitIncrement.to_event(),
         ParsecVote::CheckRelocate.to_event(),
-        Rpc::ExpectCandidate(candidate).to_event(),
+        Rpc::ExpectCandidate(old_public_id).to_event(),
     ]);
 
     let optional_after_expect_candidate = RandomEvents(vec![
@@ -184,7 +186,7 @@ fn relocate_adult_dst() {
     ]);
 
     let optional_after_check_resource_proof = RandomEvents(vec![Rpc::ResourceProofResponse {
-        candidate: candidate,
+        candidate: new_public_id,
         destination: dst_name,
         proof: Proof::ValidPart,
     }
@@ -205,11 +207,11 @@ fn relocate_adult_dst() {
         .action
         .inner()
         .our_current_nodes
-        .contains_key(&candidate.name()));
+        .contains_key(&new_public_id.name()));
 
     assert_eq!(
         State::Online,
-        unwrap!(member_state.action.node_state(candidate.name())).state
+        unwrap!(member_state.action.node_state(new_public_id.name())).state
     );
 
     optional_any_time.handle(&mut member_state, &mut rng);

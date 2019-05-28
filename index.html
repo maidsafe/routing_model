@@ -455,6 +455,12 @@
             <p>Return a candidate ready to be resource proofed (First node in State::WaitingCandidateInfo state)
             </p>
         </div>
+        <button class="collapsible">update_to_node</button>
+        <div class="content">
+            <p>Convert the candidate node at the target interval address to a node using the new_public_id.
+                Update the state of the node with the given state.
+            </p>
+        </div>
         <button class="collapsible">CANDIDATE</button>
         <div class="content">
             <p>Option&lt(Candidate)&gt.<br />
@@ -509,7 +515,7 @@
 
         ParsecConsensus -- Parsec::PurgeCandidate<br />for CANDIDATE --> RemoveNode
         ParsecConsensus -- Parsec::Online<br />for CANDIDATE --> MakeOnline
-        MakeOnline["set_node_state(<br />Candidate,<br />State::Online)<br /><br />send_rpc(<br />Rpc::NodeApproval)"]
+        MakeOnline["update_to_node(<br />Parsec::Online info,<br />Parsec::Online new_public_id,<br />State::Online)<br /><br />send_rpc(<br />Rpc::NodeApproval)"]
         RemoveNode["purge_node_info(<br />candidate node)"]
         RemoveNode --> ReStartCheckResourceProofTimeout
         MakeOnline --> ReStartCheckResourceProofTimeout

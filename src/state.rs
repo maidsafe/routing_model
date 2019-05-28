@@ -8,7 +8,7 @@
 
 use crate::{
     actions::Action,
-    flows_dst::{RespondToRelocateRequests, StartRelocatedNodeConnection, StartResourceProof},
+    flows_dst::{RespondToRelocateRequests, StartResourceProof},
     flows_elder::{
         CheckOnlineOffline, ProcessElderChange, ProcessMerge, ProcessSplit,
         StartMergeSplitAndChangeElders,
@@ -48,8 +48,8 @@ pub struct StartMergeSplitAndChangeEldersState {
 
 #[derive(Debug, PartialEq, Default, Clone)]
 pub struct StartResourceProofState {
-    pub candidate: Option<Candidate>,
-    pub got_candidate_info: bool,
+    pub candidate_info: Option<CandidateInfo>,
+    pub candidate: Option<(Name, Candidate)>,
     pub voted_online: bool,
 }
 
@@ -133,10 +133,6 @@ impl MemberState {
             return TryResult::Handled;
         }
 
-        if let TryResult::Handled = self.as_start_relocated_node_connection().try_next(event) {
-            return TryResult::Handled;
-        }
-
         if let TryResult::Handled = self.as_start_resource_proof().try_next(event) {
             return TryResult::Handled;
         }
@@ -168,10 +164,6 @@ impl MemberState {
 
     pub fn as_respond_to_relocate_requests(&mut self) -> RespondToRelocateRequests {
         RespondToRelocateRequests(self)
-    }
-
-    pub fn as_start_relocated_node_connection(&mut self) -> StartRelocatedNodeConnection {
-        StartRelocatedNodeConnection(self)
     }
 
     pub fn as_start_resource_proof(&mut self) -> StartResourceProof {
