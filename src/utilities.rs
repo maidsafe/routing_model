@@ -264,6 +264,7 @@ pub struct CandidateInfo {
     pub old_public_id: Candidate,
     pub new_public_id: Candidate,
     pub destination: Name,
+    pub waiting_candidate_name: Name,
     pub valid: bool,
 }
 
@@ -314,8 +315,6 @@ pub enum Rpc {
 
     ExpectCandidate(Candidate),
 
-    NodeConnected(Candidate, GenesisPfxInfo),
-
     ResourceProof {
         candidate: Candidate,
         source: Name,
@@ -362,7 +361,6 @@ impl Rpc {
             | Rpc::Merge(_) => None,
 
             Rpc::NodeApproval(candidate, _)
-            | Rpc::NodeConnected(candidate, _)
             | Rpc::ResourceProof { candidate, .. }
             | Rpc::ResourceProofReceipt { candidate, .. } => Some(candidate.0.name),
 
@@ -438,7 +436,6 @@ pub enum LocalEvent {
 
     TimeoutCheckElder,
     JoiningTimeoutResendInfo,
-    JoiningTimeoutConnectRefused,
     JoiningTimeoutProofRefused,
     ResourceProofForElderReady(Name),
     NodeDetectedOffline(Node),
@@ -475,7 +472,6 @@ pub enum ActionTriggered {
     CompleteSplit,
 
     Scheduled(LocalEvent),
-    Killed(LocalEvent),
 
     ComputeResourceProofForElder(Name),
 

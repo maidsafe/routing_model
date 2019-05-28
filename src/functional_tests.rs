@@ -158,7 +158,8 @@ fn relocate_adult_dst() {
     let candidate_info = CandidateInfo {
         old_public_id,
         new_public_id,
-        destination: member_state.action.inner().next_target_interval,
+        destination: dst_name,
+        waiting_candidate_name: member_state.action.inner().next_target_interval,
         valid: true,
     };
 

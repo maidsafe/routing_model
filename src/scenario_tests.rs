@@ -92,6 +92,7 @@ const NODE_ELDER_131: Node = Node(Attributes {
 });
 const NODE_ELDER_132: Node = Node(ATTRIBUTES_132);
 
+const NAME_109: Name = NODE_ELDER_109.0.name;
 const NAME_110: Name = NODE_ELDER_110.0.name;
 const NAME_111: Name = NODE_ELDER_111.0.name;
 
@@ -113,7 +114,8 @@ const SPLIT_SECTION_INFO_2: SectionInfo = SectionInfo(Section(2), 0);
 const CANDIDATE_INFO_VALID_1: CandidateInfo = CandidateInfo {
     old_public_id: CANDIDATE_1_OLD,
     new_public_id: CANDIDATE_1,
-    destination: TARGET_INTERVAL_1,
+    destination: OUR_NAME,
+    waiting_candidate_name: TARGET_INTERVAL_1,
     valid: true,
 };
 const REMOVE_CANDIDATE_1: NodeChange = NodeChange::Remove(TARGET_INTERVAL_1);
@@ -419,6 +421,7 @@ mod dst_tests {
                 old_public_id: CANDIDATE_1_OLD,
                 new_public_id: CANDIDATE_1,
                 destination: OUR_NAME,
+                waiting_candidate_name: TARGET_INTERVAL_1,
                 valid: false,
             })
             .to_event()],
@@ -464,6 +467,7 @@ mod dst_tests {
                 old_public_id: CANDIDATE_2,
                 new_public_id: CANDIDATE_2,
                 destination: OUR_NAME,
+                waiting_candidate_name: TARGET_INTERVAL_1,
                 valid: true,
             })
             .to_event()],
@@ -1709,15 +1713,26 @@ mod node_tests {
             &[],
             &AssertJoiningState {
                 action_our_events: vec![
-                    Rpc::CandidateInfo(CandidateInfo {
-                        old_public_id: OUR_NODE_CANDIDATE_OLD,
-                        new_public_id: OUR_NODE_CANDIDATE,
-                        destination: TARGET_INTERVAL_1,
-                        valid: true,
-                    })
+                    Rpc::ConnectionInfoRequest {
+                        source: OUR_NAME,
+                        destination: NAME_109,
+                        connection_info: OUR_NAME.0,
+                    }
+                    .to_event(),
+                    Rpc::ConnectionInfoRequest {
+                        source: OUR_NAME,
+                        destination: NAME_110,
+                        connection_info: OUR_NAME.0,
+                    }
+                    .to_event(),
+                    Rpc::ConnectionInfoRequest {
+                        source: OUR_NAME,
+                        destination: NAME_111,
+                        connection_info: OUR_NAME.0,
+                    }
                     .to_event(),
                     ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutResendInfo).to_event(),
-                    ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutConnectRefused).to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutProofRefused).to_event(),
                 ],
                 routine_complete_output: None,
             },
@@ -1737,12 +1752,23 @@ mod node_tests {
             &[LocalEvent::JoiningTimeoutResendInfo.to_event()],
             &AssertJoiningState {
                 action_our_events: vec![
-                    Rpc::CandidateInfo(CandidateInfo {
-                        old_public_id: OUR_NODE_CANDIDATE_OLD,
-                        new_public_id: OUR_NODE_CANDIDATE,
-                        destination: TARGET_INTERVAL_1,
-                        valid: true,
-                    })
+                    Rpc::ConnectionInfoRequest {
+                        source: OUR_NAME,
+                        destination: NAME_109,
+                        connection_info: OUR_NAME.0,
+                    }
+                    .to_event(),
+                    Rpc::ConnectionInfoRequest {
+                        source: OUR_NAME,
+                        destination: NAME_110,
+                        connection_info: OUR_NAME.0,
+                    }
+                    .to_event(),
+                    Rpc::ConnectionInfoRequest {
+                        source: OUR_NAME,
+                        destination: NAME_111,
+                        connection_info: OUR_NAME.0,
+                    }
                     .to_event(),
                     ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutResendInfo).to_event(),
                 ],
@@ -1762,13 +1788,13 @@ mod node_tests {
             "",
             &initial_state,
             &[
-                Rpc::ConnectionInfoRequest {
+                Rpc::ConnectionInfoResponse {
                     source: NAME_110,
                     destination: OUR_NAME,
                     connection_info: NAME_110.0,
                 }
                 .to_event(),
-                Rpc::ConnectionInfoRequest {
+                Rpc::ConnectionInfoResponse {
                     source: NAME_111,
                     destination: OUR_NAME,
                     connection_info: NAME_111.0,
@@ -1777,43 +1803,23 @@ mod node_tests {
             ],
             &AssertJoiningState {
                 action_our_events: vec![
-                    Rpc::ConnectionInfoResponse {
-                        source: OUR_NAME,
+                    Rpc::CandidateInfo(CandidateInfo {
+                        old_public_id: OUR_NODE_CANDIDATE_OLD,
+                        new_public_id: OUR_NODE_CANDIDATE,
                         destination: NAME_110,
-                        connection_info: OUR_NAME.0,
-                    }
+                        waiting_candidate_name: TARGET_INTERVAL_1,
+                        valid: true,
+                    })
                     .to_event(),
-                    Rpc::ConnectionInfoResponse {
-                        source: OUR_NAME,
+                    Rpc::CandidateInfo(CandidateInfo {
+                        old_public_id: OUR_NODE_CANDIDATE_OLD,
+                        new_public_id: OUR_NODE_CANDIDATE,
                         destination: NAME_111,
-                        connection_info: OUR_NAME.0,
-                    }
+                        waiting_candidate_name: TARGET_INTERVAL_1,
+                        valid: true,
+                    })
                     .to_event(),
                 ],
-                routine_complete_output: None,
-            },
-        );
-    }
-
-    #[test]
-    fn joining_receive_node_connected() {
-        let mut initial_state = initial_joining_state_with_dst_200();
-        initial_state.start(CANDIDATE_RELOCATED_INFO_132);
-
-        let initial_state = arrange_initial_joining_state(&initial_state, &[]);
-
-        run_joining_test(
-            "",
-            &initial_state,
-            &[
-                Rpc::NodeConnected(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))
-                    .to_event(),
-            ],
-            &AssertJoiningState {
-                action_our_events: vec![ActionTriggered::Killed(
-                    LocalEvent::JoiningTimeoutConnectRefused,
-                )
-                .to_event()],
                 routine_complete_output: None,
             },
         );
@@ -1823,14 +1829,7 @@ mod node_tests {
     fn joining_receive_two_resource_proof() {
         let mut initial_state = initial_joining_state_with_dst_200();
         initial_state.start(CANDIDATE_RELOCATED_INFO_132);
-
-        let initial_state = arrange_initial_joining_state(
-            &initial_state,
-            &[
-                Rpc::NodeConnected(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))
-                    .to_event(),
-            ],
-        );
+        let initial_state = arrange_initial_joining_state(&initial_state, &[]);
 
         run_joining_test(
             "Start computing resource proof when receiving ResourceProof RPC and setup timers.",
@@ -1851,9 +1850,7 @@ mod node_tests {
             ],
             &AssertJoiningState {
                 action_our_events: vec![
-                    ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutProofRefused).to_event(),
                     ActionTriggered::ComputeResourceProofForElder(NAME_111).to_event(),
-                    ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutProofRefused).to_event(),
                     ActionTriggered::ComputeResourceProofForElder(NAME_110).to_event(),
                 ],
                 routine_complete_output: None,
@@ -1865,14 +1862,7 @@ mod node_tests {
     fn joining_computed_two_proofs() {
         let mut initial_state = initial_joining_state_with_dst_200();
         initial_state.start(CANDIDATE_RELOCATED_INFO_132);
-
-        let initial_state = arrange_initial_joining_state(
-            &initial_state,
-            &[
-                Rpc::NodeConnected(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))
-                    .to_event(),
-            ],
-        );
+        let initial_state = arrange_initial_joining_state(&initial_state, &[]);
 
         run_joining_test(
             "When proof computed, start sending response to correct Elder.",
@@ -1911,8 +1901,6 @@ mod node_tests {
         let initial_state = arrange_initial_joining_state(
             &initial_state,
             &[
-                Rpc::NodeConnected(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))
-                    .to_event(),
                 Rpc::ResourceProof {
                     candidate: OUR_NODE_CANDIDATE,
                     source: NAME_111,
@@ -1952,8 +1940,6 @@ mod node_tests {
         let initial_state = arrange_initial_joining_state(
             &initial_state,
             &[
-                Rpc::NodeConnected(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))
-                    .to_event(),
                 Rpc::ResourceProof {
                     candidate: OUR_NODE_CANDIDATE,
                     source: NAME_111,
@@ -1993,8 +1979,18 @@ mod node_tests {
         let initial_state = arrange_initial_joining_state(
             &initial_state,
             &[
-                Rpc::NodeConnected(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))
-                    .to_event(),
+                Rpc::ConnectionInfoResponse {
+                    source: NAME_110,
+                    destination: OUR_NAME,
+                    connection_info: NAME_110.0,
+                }
+                .to_event(),
+                Rpc::ConnectionInfoResponse {
+                    source: NAME_111,
+                    destination: OUR_NAME,
+                    connection_info: NAME_111.0,
+                }
+                .to_event(),
                 TestEvent::SetResourceProof(NAME_111, ProofSource(2)).to_event(),
                 LocalEvent::ResourceProofForElderReady(NAME_111).to_event(),
                 TestEvent::SetResourceProof(NAME_110, ProofSource(2)).to_event(),
@@ -2013,20 +2009,32 @@ mod node_tests {
         );
 
         run_joining_test(
-            "When connected, resend the incomplete proofs not sent within timeout.",
+            "When connected, resend connection info or candidate info as needed.",
             &initial_state,
-            &[
-                LocalEvent::JoiningTimeoutResendInfo.to_event(),
-                LocalEvent::JoiningTimeoutResendInfo.to_event(),
-            ],
+            &[LocalEvent::JoiningTimeoutResendInfo.to_event()],
             &AssertJoiningState {
                 action_our_events: vec![
-                    ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutResendInfo).to_event(),
-                    Rpc::ResourceProofResponse {
-                        candidate: OUR_NODE_CANDIDATE,
-                        destination: NAME_110,
-                        proof: Proof::ValidPart,
+                    Rpc::ConnectionInfoRequest {
+                        source: OUR_NAME,
+                        destination: NAME_109,
+                        connection_info: OUR_NAME.0,
                     }
+                    .to_event(),
+                    Rpc::CandidateInfo(CandidateInfo {
+                        old_public_id: OUR_NODE_CANDIDATE_OLD,
+                        new_public_id: OUR_NODE_CANDIDATE,
+                        destination: NAME_110,
+                        waiting_candidate_name: TARGET_INTERVAL_1,
+                        valid: true,
+                    })
+                    .to_event(),
+                    Rpc::CandidateInfo(CandidateInfo {
+                        old_public_id: OUR_NODE_CANDIDATE_OLD,
+                        new_public_id: OUR_NODE_CANDIDATE,
+                        destination: NAME_111,
+                        waiting_candidate_name: TARGET_INTERVAL_1,
+                        valid: true,
+                    })
                     .to_event(),
                     ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutResendInfo).to_event(),
                 ],

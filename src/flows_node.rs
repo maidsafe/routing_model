@@ -21,9 +21,8 @@ impl<'a> JoiningRelocateCandidate<'a> {
     pub fn start_event_loop(&mut self, relocated_info: RelocatedInfo) {
         self.0.join_routine.relocated_info = Some(relocated_info);
 
-        self.send_candidate_info();
-        self.start_resend_info_timeout();
-        self.start_refused_connect_timeout();
+        self.connect_or_send_candidate_info();
+        self.start_refused_timeout();
     }
 
     pub fn try_next(&mut self, event: WaitedEvent) -> TryResult {
@@ -49,20 +48,12 @@ impl<'a> JoiningRelocateCandidate<'a> {
         }
 
         match rpc {
-            Rpc::NodeConnected(_, _) => {
-                self.complete_connected();
-                TryResult::Handled
-            }
             Rpc::NodeApproval(_, info) => {
                 self.exit(info);
                 TryResult::Handled
             }
-            Rpc::ConnectionInfoRequest {
-                source,
-                connection_info,
-                ..
-            } => {
-                self.send_connection_info_response(source, connection_info);
+            Rpc::ConnectionInfoResponse { source, .. } => {
+                self.send_candidate_info(source);
                 TryResult::Handled
             }
             Rpc::ResourceProof { proof, source, .. } => {
@@ -84,20 +75,11 @@ impl<'a> JoiningRelocateCandidate<'a> {
                 TryResult::Handled
             }
             LocalEvent::JoiningTimeoutResendInfo => {
-                self.check_connected_and_resend_info();
+                self.connect_or_send_candidate_info();
                 TryResult::Handled
             }
             _ => TryResult::Unhandled,
         }
-    }
-
-    fn check_connected_and_resend_info(&mut self) {
-        if self.0.join_routine.connected {
-            self.resend_proofs();
-        } else {
-            self.send_candidate_info();
-        }
-        self.start_resend_info_timeout();
     }
 
     fn exit(&mut self, info: GenesisPfxInfo) {
@@ -105,10 +87,6 @@ impl<'a> JoiningRelocateCandidate<'a> {
     }
 
     fn discard(&mut self) {}
-
-    fn send_connection_info_response(&mut self, source: Name, _connect_info: i32) {
-        self.0.action.send_connection_info_response(source);
-    }
 
     fn send_next_proof_response(&mut self, source: Name) {
         if let Some(next_part) = self.0.action.get_next_resource_proof_part(source) {
@@ -118,59 +96,37 @@ impl<'a> JoiningRelocateCandidate<'a> {
         }
     }
 
-    fn resend_proof_response(&mut self, source: Name) {
-        if let Some(next_part) = self.0.action.get_resend_resource_proof_part(source) {
-            self.0
-                .action
-                .send_resource_proof_response(source, next_part);
-        }
-    }
-
-    fn send_candidate_info(&mut self) {
+    fn send_candidate_info(&mut self, destination: Name) {
         self.0
             .action
-            .send_candidate_info(unwrap!(self.0.join_routine.relocated_info));
+            .send_candidate_info(destination, unwrap!(self.0.join_routine.relocated_info));
     }
 
-    fn start_resend_info_timeout(&mut self) {
+    fn connect_or_send_candidate_info(&mut self) {
+        let relocated_info = unwrap!(self.0.join_routine.relocated_info);
+
+        let (connected, unconnected) = self.0.action.get_connected_and_unconnected(relocated_info);
+
+        for name in unconnected {
+            self.0.action.send_connection_info_request(name);
+        }
+
+        for name in connected {
+            self.0.action.send_candidate_info(name, relocated_info);
+        }
+
         self.0
             .action
             .schedule_event(LocalEvent::JoiningTimeoutResendInfo);
     }
 
-    fn start_refused_connect_timeout(&mut self) {
-        self.0
-            .action
-            .schedule_event(LocalEvent::JoiningTimeoutConnectRefused);
-    }
-
-    fn complete_connected(&mut self) {
-        self.0.join_routine.connected = true;
-        self.0
-            .action
-            .kill_scheduled_event(LocalEvent::JoiningTimeoutConnectRefused);
-    }
-
-    fn start_compute_resource_proof(&mut self, source: Name, proof: ProofRequest) {
+    fn start_refused_timeout(&mut self) {
         self.0
             .action
             .schedule_event(LocalEvent::JoiningTimeoutProofRefused);
-        self.0.action.start_compute_resource_proof(source, proof);
     }
 
-    fn resend_proofs(&mut self) {
-        self.0
-            .join_routine
-            .need_resend_proofs
-            .clone()
-            .iter()
-            .for_each(|name| self.resend_proof_response(*name));
-
-        self.0.join_routine.need_resend_proofs = self
-            .0
-            .action
-            .get_resource_proof_elders()
-            .into_iter()
-            .collect();
+    fn start_compute_resource_proof(&mut self, source: Name, proof: ProofRequest) {
+        self.0.action.start_compute_resource_proof(source, proof);
     }
 }

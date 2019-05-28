@@ -180,24 +180,20 @@
     </div>
     <div class="mermaid">
         graph TB
+        LoopStart --> WaitFor
+
         JoiningRelocateCandidate --> InitialSendConnectionInfoRequest
         JoiningRelocateCandidate["JoiningRelocateCandidate<br />(Take RelocatedInfo)"]
         style JoiningRelocateCandidate fill:#f9f,stroke:#333,stroke-width:4px
 
         InitialSendConnectionInfoRequest["RELOCATED_INFO = RelocatedInfo<br/>
-        <br/>
-        For node in RELOCATED_INFO.section_info:<br/>
-        send_rpc(ConnectionInfoRequest) to node<br/>
-        <br/>
-        schedule(TimeoutRefused)<br/>
-        schedule(TimeoutResendInfo)"]
-        InitialSendConnectionInfoRequest-->LoopStart
+        schedule(TimeoutRefused)"]
 
-        LoopStart --> WaitFor
         WaitFor(("Wait for 0:"))
         LocalEvent((Local<br />Event))
         WaitFor --> LocalEvent
 
+        InitialSendConnectionInfoRequest-->CheckResend
         LocalEvent--"TimeoutResendInfo triggered"--> CheckResend
         CheckResend["(connected, unconnected) =<br/>get_connected_and_unconnected(<br/>RELOCATED_INFO.section_info)<br/>
         <br/>

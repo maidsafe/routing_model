@@ -14,7 +14,7 @@ use crate::utilities::{
 use itertools::Itertools;
 use std::{
     cell::RefCell,
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt::{self, Debug, Formatter},
     rc::Rc,
 };
@@ -35,6 +35,8 @@ pub struct InnerAction {
     pub merge_infos: Option<SectionInfo>,
     pub churn_needed: Option<ChurnNeeded>,
 
+    pub connected: BTreeSet<Name>,
+
     // Proving node:
     pub resource_proofs_for_elder: BTreeMap<Name, ProofSource>,
 }
@@ -54,6 +56,8 @@ impl InnerAction {
 
             merge_infos: Default::default(),
             churn_needed: Default::default(),
+
+            connected: Default::default(),
 
             resource_proofs_for_elder: Default::default(),
         }
@@ -217,10 +221,6 @@ impl Action {
 
     pub fn schedule_event(&self, event: LocalEvent) {
         self.action_triggered(ActionTriggered::Scheduled(event));
-    }
-
-    pub fn kill_scheduled_event(&self, event: LocalEvent) {
-        self.action_triggered(ActionTriggered::Killed(event));
     }
 
     pub fn action_triggered(&self, event: ActionTriggered) {
@@ -467,7 +467,7 @@ impl Action {
         self.0
             .borrow()
             .our_current_nodes
-            .get(&info.destination)
+            .get(&info.waiting_candidate_name)
             .map(|state| state.state.waiting_candidate_info().is_some())
             .unwrap_or(false)
     }
@@ -516,13 +516,15 @@ impl Action {
         self.action_triggered(ActionTriggered::ComputeResourceProofForElder(source));
     }
 
-    pub fn get_resource_proof_elders(&self) -> Vec<Name> {
-        self.0
-            .borrow()
-            .resource_proofs_for_elder
-            .keys()
-            .cloned()
-            .collect()
+    pub fn get_connected_and_unconnected(&self, info: RelocatedInfo) -> (Vec<Name>, Vec<Name>) {
+        self.get_section_elders(info.section_info)
+            .into_iter()
+            .map(|node| node.name())
+            .partition(|name| self.0.borrow().connected.contains(name))
+    }
+
+    pub fn get_section_elders(&self, info: SectionInfo) -> Vec<Node> {
+        unwrap!(self.0.borrow().section_members.get(&info)).clone()
     }
 
     pub fn get_next_resource_proof_part(&self, source: Name) -> Option<Proof> {
@@ -533,15 +535,6 @@ impl Action {
             .and_then(ProofSource::next_part)
     }
 
-    pub fn get_resend_resource_proof_part(&self, source: Name) -> Option<Proof> {
-        self.0
-            .borrow_mut()
-            .resource_proofs_for_elder
-            .get_mut(&source)
-            .and_then(|proof_source| proof_source.resend())
-    }
-
-    #[allow(dead_code)]
     pub fn send_connection_info_request(&self, destination: Name) {
         let source = self.our_name();
         self.send_rpc(Rpc::ConnectionInfoRequest {
@@ -551,6 +544,7 @@ impl Action {
         });
     }
 
+    #[allow(dead_code)]
     pub fn send_connection_info_response(&self, destination: Name) {
         let source = self.our_name();
         self.send_rpc(Rpc::ConnectionInfoResponse {
@@ -560,12 +554,15 @@ impl Action {
         });
     }
 
-    pub fn send_candidate_info(&self, relocated_info: RelocatedInfo) {
+    pub fn send_candidate_info(&self, destination: Name, relocated_info: RelocatedInfo) {
+        let _ = self.0.borrow_mut().connected.insert(destination);
+
         let new_public_id = Candidate(self.0.borrow().our_attributes);
         self.send_rpc(Rpc::CandidateInfo(CandidateInfo {
             old_public_id: relocated_info.candidate,
             new_public_id,
-            destination: relocated_info.target_interval_centre,
+            destination,
+            waiting_candidate_name: relocated_info.target_interval_centre,
             valid: true,
         }));
     }
