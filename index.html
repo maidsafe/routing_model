@@ -1086,16 +1086,22 @@
                 Note that elder changes are only processed when the section is not in the middle of handling a merge.
             </p>
         </div>
-    </div>
-    <button class="collapsible">split_needed</button>
-    <div class="content">
-        <p>This function indicates that we need splitting.<br>
-            The details for the trigger are still in slight flux, but here are some possibilities:
-            <ul>
-                <li> The number of State::Online adults plus elders is above our min section size of 10 elder plus 90
-                    Adults + buffer
-            </ul>
-        </p>
+        <button class="collapsible">split_needed</button>
+        <div class="content">
+            <p>This function indicates that we need splitting.<br>
+                The details for the trigger are still in slight flux, but here are some possibilities:
+                <ul>
+                    <li> The number of State::Online adults plus elders is above our min section size of 10 elder plus 90
+                        Adults + buffer
+                </ul>
+            </p>
+        </div>
+        <button class="collapsible">checkpoint_needed</button>
+        <div class="content">
+            <p>This function indicates that we need to checkpoint due to an over bloated Parsec instance.<br>
+            This would not be necesary if either ProcessSplit or ProcessMerge is active.
+            </p>
+        </div>
     </div>
     <div class="mermaid">
         graph TB
