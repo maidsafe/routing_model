@@ -144,14 +144,10 @@ impl State {
             || self == State::RelocatingBackOnline
     }
 
-    pub fn is_resource_proofing(self) -> bool {
-        self == State::WaitingProofing
-    }
-
-    pub fn is_waiting_candidate_info(self) -> bool {
+    pub fn waiting_candidate_info(self) -> Option<RelocatedInfo> {
         match self {
-            State::WaitingCandidateInfo(_) => true,
-            _ => false,
+            State::WaitingCandidateInfo(info) => Some(info),
+            _ => None,
         }
     }
 
@@ -268,6 +264,7 @@ pub struct CandidateInfo {
     pub old_public_id: Candidate,
     pub new_public_id: Candidate,
     pub destination: Name,
+    pub waiting_candidate_name: Name,
     pub valid: bool,
 }
 
@@ -318,8 +315,6 @@ pub enum Rpc {
 
     ExpectCandidate(Candidate),
 
-    NodeConnected(Candidate, GenesisPfxInfo),
-
     ResourceProof {
         candidate: Candidate,
         source: Name,
@@ -366,7 +361,6 @@ impl Rpc {
             | Rpc::Merge(_) => None,
 
             Rpc::NodeApproval(candidate, _)
-            | Rpc::NodeConnected(candidate, _)
             | Rpc::ResourceProof { candidate, .. }
             | Rpc::ResourceProofReceipt { candidate, .. } => Some(candidate.0.name),
 
@@ -382,10 +376,7 @@ impl Rpc {
 pub enum ParsecVote {
     ExpectCandidate(Candidate),
 
-    CheckRelocatedNodeConnection,
-    CandidateConnected(CandidateInfo),
-
-    Online(Candidate),
+    Online(Candidate, Candidate),
     PurgeCandidate(Candidate),
     CheckResourceProof,
 
@@ -415,14 +406,12 @@ impl ParsecVote {
     pub fn candidate(&self) -> Option<Candidate> {
         match self {
             ParsecVote::ExpectCandidate(candidate)
-            | ParsecVote::Online(candidate)
+            | ParsecVote::Online(candidate, _)
             | ParsecVote::PurgeCandidate(candidate)
             | ParsecVote::RefuseCandidate(candidate)
             | ParsecVote::RelocateResponse(RelocatedInfo { candidate, .. }) => Some(*candidate),
 
-            ParsecVote::CheckRelocatedNodeConnection
-            | ParsecVote::CandidateConnected(_)
-            | ParsecVote::CheckResourceProof
+            ParsecVote::CheckResourceProof
             | ParsecVote::AddElderNode(_)
             | ParsecVote::RemoveElderNode(_)
             | ParsecVote::NewSectionInfo(_)
@@ -439,7 +428,6 @@ impl ParsecVote {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LocalEvent {
-    CheckRelocatedNodeConnectionTimeout,
     TimeoutAccept,
     CheckResourceProofTimeout,
 
@@ -448,7 +436,6 @@ pub enum LocalEvent {
 
     TimeoutCheckElder,
     JoiningTimeoutResendInfo,
-    JoiningTimeoutConnectRefused,
     JoiningTimeoutProofRefused,
     ResourceProofForElderReady(Name),
     NodeDetectedOffline(Node),
@@ -485,7 +472,6 @@ pub enum ActionTriggered {
     CompleteSplit,
 
     Scheduled(LocalEvent),
-    Killed(LocalEvent),
 
     ComputeResourceProofForElder(Name),
 

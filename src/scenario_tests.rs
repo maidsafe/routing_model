@@ -67,8 +67,8 @@ const NODE_1_OLD: Node = Node(ATTRIBUTES_1_OLD);
 const NODE_1: Node = Node(ATTRIBUTES_1);
 const NODE_2_OLD: Node = Node(ATTRIBUTES_2_OLD);
 const NODE_2: Node = Node(ATTRIBUTES_2);
-const SET_ONLINE_NODE_1: NodeChange = NodeChange::State(Node(ATTRIBUTES_1), State::Online);
-const REMOVE_NODE_1: NodeChange = NodeChange::Remove(ATTRIBUTES_1.name);
+const SET_ONLINE_NODE_1: NodeChange =
+    NodeChange::ReplaceWith(TARGET_INTERVAL_1, NODE_1, State::Online);
 
 const NODE_ELDER_109: Node = Node(Attributes {
     name: Name(109),
@@ -92,6 +92,7 @@ const NODE_ELDER_131: Node = Node(Attributes {
 });
 const NODE_ELDER_132: Node = Node(ATTRIBUTES_132);
 
+const NAME_109: Name = NODE_ELDER_109.0.name;
 const NAME_110: Name = NODE_ELDER_110.0.name;
 const NAME_111: Name = NODE_ELDER_111.0.name;
 
@@ -113,9 +114,11 @@ const SPLIT_SECTION_INFO_2: SectionInfo = SectionInfo(Section(2), 0);
 const CANDIDATE_INFO_VALID_1: CandidateInfo = CandidateInfo {
     old_public_id: CANDIDATE_1_OLD,
     new_public_id: CANDIDATE_1,
-    destination: TARGET_INTERVAL_1,
+    destination: OUR_NAME,
+    waiting_candidate_name: TARGET_INTERVAL_1,
     valid: true,
 };
+const REMOVE_CANDIDATE_1: NodeChange = NodeChange::Remove(TARGET_INTERVAL_1);
 
 const CANDIDATE_RELOCATED_INFO_1: RelocatedInfo = RelocatedInfo {
     candidate: CANDIDATE_1_OLD,
@@ -132,8 +135,6 @@ const CANDIDATE_RELOCATED_INFO_132: RelocatedInfo = RelocatedInfo {
 };
 
 const CANDIDATE_INFO_VALID_RPC_1: Rpc = Rpc::CandidateInfo(CANDIDATE_INFO_VALID_1);
-const CANDIDATE_INFO_VALID_PARSEC_VOTE_1: ParsecVote =
-    ParsecVote::CandidateConnected(CANDIDATE_INFO_VALID_1);
 const TARGET_INTERVAL_1: Name = Name(1234);
 const TARGET_INTERVAL_2: Name = Name(1235);
 
@@ -285,7 +286,7 @@ mod dst_tests {
                     )
                     .to_event(),
                     Rpc::RelocateResponse(CANDIDATE_RELOCATED_INFO_1).to_event(),
-                    ActionTriggered::Scheduled(LocalEvent::CheckResourceProofTimeout).to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::TimeoutAccept).to_event(),
                 ],
             },
         );
@@ -321,14 +322,14 @@ mod dst_tests {
         );
 
         run_test(
-            "Reply with connection info until node is consensused connected",
+            "Start resource proofing candidate: Send RPC.",
             &initial_state,
             &[CANDIDATE_INFO_VALID_RPC_1.to_event()],
             &AssertState {
-                action_our_events: vec![Rpc::ConnectionInfoRequest {
+                action_our_events: vec![Rpc::ResourceProof {
+                    candidate: CANDIDATE_1,
                     source: OUR_NAME,
-                    destination: CANDIDATE_1.name(),
-                    connection_info: OUR_NAME.0,
+                    proof: OUR_PROOF_REQUEST,
                 }
                 .to_event()],
             },
@@ -341,19 +342,20 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
                 CANDIDATE_INFO_VALID_RPC_1.to_event(),
             ],
         );
 
         run_test(
-            "Reply with connection info until node is consensused connected",
+            "Start resource proofing candidate: Send same RPC again.",
             &initial_state,
             &[CANDIDATE_INFO_VALID_RPC_1.to_event()],
             &AssertState {
-                action_our_events: vec![Rpc::ConnectionInfoRequest {
+                action_our_events: vec![Rpc::ResourceProof {
+                    candidate: CANDIDATE_1,
                     source: OUR_NAME,
-                    destination: CANDIDATE_1.name(),
-                    connection_info: OUR_NAME.0,
+                    proof: OUR_PROOF_REQUEST,
                 }
                 .to_event()],
             },
@@ -361,7 +363,7 @@ mod dst_tests {
     }
 
     #[test]
-    fn parsec_expect_candidate_then_candidate_info_and_connect_response() {
+    fn parsec_expect_candidate_then_candidate_info_then_expect_candidate_again() {
         let initial_state = arrange_initial_state(
             &initial_state_old_elders(),
             &[
@@ -372,198 +374,32 @@ mod dst_tests {
         );
 
         run_test(
-            "Candidate complete connection vote for it",
+            "Continue accepting old ExpectCandidate until candidate resource proof complete",
             &initial_state,
-            &[Rpc::ConnectionInfoResponse {
-                source: CANDIDATE_1.name(),
-                destination: TARGET_INTERVAL_1,
-                connection_info: 0,
-            }
-            .to_event()],
-            &AssertState {
-                action_our_events: vec![CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event()],
-            },
-        );
-    }
-
-    #[test]
-    fn parsec_expect_candidate_then_candidate_info_twice_and_connect_response_twice() {
-        let initial_state = arrange_initial_state(
-            &initial_state_old_elders(),
-            &[
-                ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                ParsecVote::CheckResourceProof.to_event(),
-                CANDIDATE_INFO_VALID_RPC_1.to_event(),
-                CANDIDATE_INFO_VALID_RPC_1.to_event(),
-                Rpc::ConnectionInfoResponse {
-                    source: CANDIDATE_1.name(),
-                    destination: TARGET_INTERVAL_1,
-                    connection_info: 0,
-                }
-                .to_event(),
-            ],
-        );
-
-        run_test(
-            "Already voted for the candidate: Let normal connect handler take it",
-            &initial_state,
-            &[Rpc::ConnectionInfoResponse {
-                source: CANDIDATE_1.name(),
-                destination: TARGET_INTERVAL_1,
-                connection_info: 0,
-            }
-            .to_event()],
-            &AssertState {
-                action_our_events: vec![ActionTriggered::NotYetImplementedErrorTriggered.to_event()],
-            },
-        );
-    }
-
-    #[test]
-    fn parsec_expect_candidate_then_parsec_candidate_info() {
-        let initial_state = arrange_initial_state(
-            &initial_state_old_elders(),
             &[ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event()],
-        );
-
-        run_test(
-            "Stop accepting old ExpectCandidate once we consensused the candidate connected",
-            &initial_state,
-            &[
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
-                ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-            ],
             &AssertState {
                 action_our_events: vec![
-                    NodeChange::ReplaceWith(TARGET_INTERVAL_1, NODE_1, State::WaitingProofing)
-                        .to_event(),
-                    Rpc::NodeConnected(CANDIDATE_1, OUR_GENESIS_INFO).to_event(),
-                    Rpc::RefuseCandidate(CANDIDATE_1_OLD).to_event(),
+                    Rpc::RelocateResponse(CANDIDATE_RELOCATED_INFO_1).to_event()
                 ],
             },
         );
     }
 
     #[test]
-    fn parsec_expect_candidate_then_parsec_candidate_info_with_shorter_section_exists() {
+    fn parsec_expect_candidate_with_shorter_section_exists() {
         let initial_state = arrange_initial_state(
             &initial_state_old_elders(),
-            &[
-                TestEvent::SetShortestPrefix(Some(OTHER_SECTION_1)).to_event(),
-                ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-            ],
+            &[TestEvent::SetShortestPrefix(Some(OTHER_SECTION_1)).to_event()],
         );
 
         let description =
-            "Relocate candidate immediately when a section with shorter prefix exists. \
-             Still refuse new candidate until current candidates processing is complete, including \
-             relocation.";
+            "Relocate candidate immediately when a section with shorter prefix exists.";
         run_test(
             description,
             &initial_state,
-            &[
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
-                ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                ParsecVote::CheckRelocate.to_event(),
-            ],
+            &[ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event()],
             &AssertState {
-                action_our_events: vec![
-                    NodeChange::ReplaceWith(TARGET_INTERVAL_1, NODE_1, State::RelocatingHop)
-                        .to_event(),
-                    Rpc::NodeConnected(CANDIDATE_1, OUR_GENESIS_INFO).to_event(),
-                    Rpc::RefuseCandidate(CANDIDATE_1_OLD).to_event(),
-                    Rpc::ExpectCandidate(CANDIDATE_1).to_event(),
-                ],
-            },
-        );
-    }
-
-    #[test]
-    fn parsec_expect_candidate_then_candidate_info_after_parsec_candidate_info() {
-        let initial_state = arrange_initial_state(
-            &initial_state_old_elders(),
-            &[
-                ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
-            ],
-        );
-
-        run_test(
-            "Discard irrelevant CandidateInfo RPCs that come after consensus on node connected.",
-            &initial_state,
-            &[CANDIDATE_INFO_VALID_RPC_1.to_event()],
-            &AssertState::default(),
-        );
-    }
-
-    #[test]
-    fn parsec_expect_candidate_then_check_too_long_timeout() {
-        run_test(
-            "Timeout trigger a vote",
-            &initial_state_old_elders(),
-            &[LocalEvent::CheckRelocatedNodeConnectionTimeout.to_event()],
-            &AssertState {
-                action_our_events: vec![ParsecVote::CheckRelocatedNodeConnection.to_event()],
-            },
-        );
-    }
-
-    #[test]
-    fn parsec_expect_candidate_then_check_too_long_twice() {
-        let initial_state = arrange_initial_state(
-            &initial_state_old_elders(),
-            &[
-                ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                ParsecVote::CheckRelocatedNodeConnection.to_event(),
-            ],
-        );
-        run_test(
-            "Drop connecting node still connecting after two CheckRelocatedNodeConnection",
-            &initial_state,
-            &[
-                ParsecVote::CheckRelocatedNodeConnection.to_event(),
-                CANDIDATE_INFO_VALID_RPC_1.to_event(),
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
-            ],
-            &AssertState {
-                action_our_events: vec![
-                    NodeChange::Remove(TARGET_INTERVAL_1).to_event(),
-                    ActionTriggered::Scheduled(LocalEvent::CheckRelocatedNodeConnectionTimeout)
-                        .to_event(),
-                ],
-            },
-        );
-    }
-
-    #[test]
-    fn parsec_expect_candidate_then_check_too_long_twice_after_valid_info_rpc() {
-        let initial_state = arrange_initial_state(
-            &initial_state_old_elders(),
-            &[
-                ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                CANDIDATE_INFO_VALID_RPC_1.to_event(),
-                ParsecVote::CheckRelocatedNodeConnection.to_event(),
-            ],
-        );
-        run_test(
-            "Drop connecting node still connecting after two CheckRelocatedNodeConnection",
-            &initial_state,
-            &[
-                ParsecVote::CheckRelocatedNodeConnection.to_event(),
-                Rpc::ConnectionInfoResponse {
-                    source: CANDIDATE_1.name(),
-                    destination: TARGET_INTERVAL_1,
-                    connection_info: 0,
-                }
-                .to_event(),
-            ],
-            &AssertState {
-                action_our_events: vec![
-                    NodeChange::Remove(TARGET_INTERVAL_1).to_event(),
-                    ActionTriggered::Scheduled(LocalEvent::CheckRelocatedNodeConnectionTimeout)
-                        .to_event(),
-                    ActionTriggered::NotYetImplementedErrorTriggered.to_event(),
-                ],
+                action_our_events: vec![Rpc::ExpectCandidate(CANDIDATE_1_OLD).to_event()],
             },
         );
     }
@@ -585,6 +421,7 @@ mod dst_tests {
                 old_public_id: CANDIDATE_1_OLD,
                 new_public_id: CANDIDATE_1,
                 destination: OUR_NAME,
+                waiting_candidate_name: TARGET_INTERVAL_1,
                 valid: false,
             })
             .to_event()],
@@ -598,8 +435,8 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
+                CANDIDATE_INFO_VALID_RPC_1.to_event(),
             ],
         );
 
@@ -608,7 +445,7 @@ mod dst_tests {
             &initial_state,
             &[LocalEvent::TimeoutAccept.to_event()],
             &AssertState {
-                action_our_events: vec![ParsecVote::PurgeCandidate(CANDIDATE_1).to_event()],
+                action_our_events: vec![ParsecVote::PurgeCandidate(CANDIDATE_1_OLD).to_event()],
             },
         );
     }
@@ -630,38 +467,11 @@ mod dst_tests {
                 old_public_id: CANDIDATE_2,
                 new_public_id: CANDIDATE_2,
                 destination: OUR_NAME,
+                waiting_candidate_name: TARGET_INTERVAL_1,
                 valid: true,
             })
             .to_event()],
             &AssertState::default(),
-        );
-    }
-
-    #[test]
-    fn parsec_expect_candidate_then_candidate_info_then_check_resource_proof() {
-        let initial_state = arrange_initial_state(
-            &initial_state_old_elders(),
-            &[
-                ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
-            ],
-        );
-
-        run_test(
-            "Start resource proofing candidate: Send RPC and start timer.",
-            &initial_state,
-            &[ParsecVote::CheckResourceProof.to_event()],
-            &AssertState {
-                action_our_events: vec![
-                    Rpc::ResourceProof {
-                        candidate: CANDIDATE_1,
-                        source: OUR_NAME,
-                        proof: OUR_PROOF_REQUEST,
-                    }
-                    .to_event(),
-                    ActionTriggered::Scheduled(LocalEvent::TimeoutAccept).to_event(),
-                ],
-            },
         );
     }
 
@@ -671,8 +481,8 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
+                CANDIDATE_INFO_VALID_RPC_1.to_event(),
             ],
         );
 
@@ -701,8 +511,8 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
+                CANDIDATE_INFO_VALID_RPC_1.to_event(),
             ],
         );
 
@@ -717,7 +527,7 @@ mod dst_tests {
             .to_event()],
             &AssertState {
                 action_our_events: vec![
-                    ParsecVote::Online(CANDIDATE_1).to_event(),
+                    ParsecVote::Online(CANDIDATE_1_OLD, CANDIDATE_1).to_event(),
                     Rpc::ResourceProofReceipt {
                         candidate: CANDIDATE_1,
                         source: OUR_NAME,
@@ -734,8 +544,8 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
+                CANDIDATE_INFO_VALID_RPC_1.to_event(),
                 Rpc::ResourceProofResponse {
                     candidate: CANDIDATE_1,
                     destination: OUR_NAME,
@@ -764,8 +574,8 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
+                CANDIDATE_INFO_VALID_RPC_1.to_event(),
             ],
         );
 
@@ -788,8 +598,8 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
+                CANDIDATE_INFO_VALID_RPC_1.to_event(),
             ],
         );
 
@@ -812,8 +622,8 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
+                CANDIDATE_INFO_VALID_RPC_1.to_event(),
             ],
         );
 
@@ -825,8 +635,8 @@ mod dst_tests {
             description,
             &initial_state,
             &[
-                ParsecVote::Online(CANDIDATE_2).to_event(),
-                ParsecVote::PurgeCandidate(CANDIDATE_2).to_event(),
+                ParsecVote::Online(CANDIDATE_2_OLD, CANDIDATE_2).to_event(),
+                ParsecVote::PurgeCandidate(CANDIDATE_2_OLD).to_event(),
             ],
             &AssertState::default(),
         );
@@ -1010,7 +820,6 @@ mod dst_tests {
             &initial_state_old_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
             ],
         );
@@ -1022,7 +831,7 @@ mod dst_tests {
             description,
             &initial_state,
             &[
-                ParsecVote::Online(CANDIDATE_1).to_event(),
+                ParsecVote::Online(CANDIDATE_1_OLD, CANDIDATE_1).to_event(),
                 ParsecVote::CheckElder.to_event(),
             ],
             &AssertState {
@@ -1042,7 +851,6 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
             ],
         );
@@ -1054,7 +862,7 @@ mod dst_tests {
             description,
             &initial_state,
             &[
-                ParsecVote::Online(CANDIDATE_1).to_event(),
+                ParsecVote::Online(CANDIDATE_1_OLD, CANDIDATE_1).to_event(),
                 ParsecVote::CheckElder.to_event(),
             ],
             &AssertState {
@@ -1076,9 +884,8 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
-                ParsecVote::Online(CANDIDATE_1).to_event(),
+                ParsecVote::Online(CANDIDATE_1_OLD, CANDIDATE_1).to_event(),
                 ParsecVote::CheckElder.to_event(),
             ],
         );
@@ -1109,9 +916,8 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
-                ParsecVote::Online(CANDIDATE_1).to_event(),
+                ParsecVote::Online(CANDIDATE_1_OLD, CANDIDATE_1).to_event(),
                 ParsecVote::CheckElder.to_event(),
             ],
         );
@@ -1132,9 +938,8 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
-                ParsecVote::Online(CANDIDATE_1).to_event(),
+                ParsecVote::Online(CANDIDATE_1_OLD, CANDIDATE_1).to_event(),
                 ParsecVote::CheckElder.to_event(),
                 ParsecVote::RemoveElderNode(NODE_ELDER_109).to_event(),
             ],
@@ -1167,9 +972,8 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
-                ParsecVote::Online(CANDIDATE_1).to_event(),
+                ParsecVote::Online(CANDIDATE_1_OLD, CANDIDATE_1).to_event(),
                 ParsecVote::CheckElder.to_event(),
             ],
         );
@@ -1206,7 +1010,7 @@ mod dst_tests {
                         section_info: OUR_INITIAL_SECTION_INFO,
                     })
                     .to_event(),
-                    ActionTriggered::Scheduled(LocalEvent::CheckResourceProofTimeout).to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::TimeoutAccept).to_event(),
                 ],
             },
         );
@@ -1218,7 +1022,6 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
             ],
         );
@@ -1226,10 +1029,34 @@ mod dst_tests {
         run_test(
             "Complete proof failing the candidate: Remove and schedule next candidate.",
             &initial_state,
-            &[ParsecVote::PurgeCandidate(CANDIDATE_1).to_event()],
+            &[ParsecVote::PurgeCandidate(CANDIDATE_1_OLD).to_event()],
             &AssertState {
                 action_our_events: vec![
-                    REMOVE_NODE_1.to_event(),
+                    REMOVE_CANDIDATE_1.to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::CheckResourceProofTimeout).to_event(),
+                ],
+            },
+        );
+    }
+
+    #[test]
+    fn parsec_expect_candidate_then_candidate_info_then_purge() {
+        let initial_state = arrange_initial_state(
+            &initial_state_young_elders(),
+            &[
+                ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
+                ParsecVote::CheckResourceProof.to_event(),
+                CANDIDATE_INFO_VALID_RPC_1.to_event(),
+            ],
+        );
+
+        run_test(
+            "Complete proof failing the candidate: Remove and schedule next candidate.",
+            &initial_state,
+            &[ParsecVote::PurgeCandidate(CANDIDATE_1_OLD).to_event()],
+            &AssertState {
+                action_our_events: vec![
+                    REMOVE_CANDIDATE_1.to_event(),
                     ActionTriggered::Scheduled(LocalEvent::CheckResourceProofTimeout).to_event(),
                 ],
             },
@@ -1242,8 +1069,8 @@ mod dst_tests {
             &initial_state_young_elders(),
             &[
                 ParsecVote::ExpectCandidate(CANDIDATE_1_OLD).to_event(),
-                CANDIDATE_INFO_VALID_PARSEC_VOTE_1.to_event(),
                 ParsecVote::CheckResourceProof.to_event(),
+                CANDIDATE_INFO_VALID_RPC_1.to_event(),
             ],
         );
 
@@ -1265,8 +1092,8 @@ mod dst_tests {
             description,
             &initial_state_old_elders(),
             &[
-                ParsecVote::Online(CANDIDATE_1).to_event(),
-                ParsecVote::PurgeCandidate(CANDIDATE_1).to_event(),
+                ParsecVote::Online(CANDIDATE_1_OLD, CANDIDATE_1).to_event(),
+                ParsecVote::PurgeCandidate(CANDIDATE_1_OLD).to_event(),
             ],
             &AssertState::default(),
         );
@@ -1886,15 +1713,26 @@ mod node_tests {
             &[],
             &AssertJoiningState {
                 action_our_events: vec![
-                    Rpc::CandidateInfo(CandidateInfo {
-                        old_public_id: OUR_NODE_CANDIDATE_OLD,
-                        new_public_id: OUR_NODE_CANDIDATE,
-                        destination: TARGET_INTERVAL_1,
-                        valid: true,
-                    })
+                    Rpc::ConnectionInfoRequest {
+                        source: OUR_NAME,
+                        destination: NAME_109,
+                        connection_info: OUR_NAME.0,
+                    }
+                    .to_event(),
+                    Rpc::ConnectionInfoRequest {
+                        source: OUR_NAME,
+                        destination: NAME_110,
+                        connection_info: OUR_NAME.0,
+                    }
+                    .to_event(),
+                    Rpc::ConnectionInfoRequest {
+                        source: OUR_NAME,
+                        destination: NAME_111,
+                        connection_info: OUR_NAME.0,
+                    }
                     .to_event(),
                     ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutResendInfo).to_event(),
-                    ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutConnectRefused).to_event(),
+                    ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutProofRefused).to_event(),
                 ],
                 routine_complete_output: None,
             },
@@ -1914,12 +1752,23 @@ mod node_tests {
             &[LocalEvent::JoiningTimeoutResendInfo.to_event()],
             &AssertJoiningState {
                 action_our_events: vec![
-                    Rpc::CandidateInfo(CandidateInfo {
-                        old_public_id: OUR_NODE_CANDIDATE_OLD,
-                        new_public_id: OUR_NODE_CANDIDATE,
-                        destination: TARGET_INTERVAL_1,
-                        valid: true,
-                    })
+                    Rpc::ConnectionInfoRequest {
+                        source: OUR_NAME,
+                        destination: NAME_109,
+                        connection_info: OUR_NAME.0,
+                    }
+                    .to_event(),
+                    Rpc::ConnectionInfoRequest {
+                        source: OUR_NAME,
+                        destination: NAME_110,
+                        connection_info: OUR_NAME.0,
+                    }
+                    .to_event(),
+                    Rpc::ConnectionInfoRequest {
+                        source: OUR_NAME,
+                        destination: NAME_111,
+                        connection_info: OUR_NAME.0,
+                    }
                     .to_event(),
                     ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutResendInfo).to_event(),
                 ],
@@ -1939,13 +1788,13 @@ mod node_tests {
             "",
             &initial_state,
             &[
-                Rpc::ConnectionInfoRequest {
+                Rpc::ConnectionInfoResponse {
                     source: NAME_110,
                     destination: OUR_NAME,
                     connection_info: NAME_110.0,
                 }
                 .to_event(),
-                Rpc::ConnectionInfoRequest {
+                Rpc::ConnectionInfoResponse {
                     source: NAME_111,
                     destination: OUR_NAME,
                     connection_info: NAME_111.0,
@@ -1954,43 +1803,23 @@ mod node_tests {
             ],
             &AssertJoiningState {
                 action_our_events: vec![
-                    Rpc::ConnectionInfoResponse {
-                        source: OUR_NAME,
+                    Rpc::CandidateInfo(CandidateInfo {
+                        old_public_id: OUR_NODE_CANDIDATE_OLD,
+                        new_public_id: OUR_NODE_CANDIDATE,
                         destination: NAME_110,
-                        connection_info: OUR_NAME.0,
-                    }
+                        waiting_candidate_name: TARGET_INTERVAL_1,
+                        valid: true,
+                    })
                     .to_event(),
-                    Rpc::ConnectionInfoResponse {
-                        source: OUR_NAME,
+                    Rpc::CandidateInfo(CandidateInfo {
+                        old_public_id: OUR_NODE_CANDIDATE_OLD,
+                        new_public_id: OUR_NODE_CANDIDATE,
                         destination: NAME_111,
-                        connection_info: OUR_NAME.0,
-                    }
+                        waiting_candidate_name: TARGET_INTERVAL_1,
+                        valid: true,
+                    })
                     .to_event(),
                 ],
-                routine_complete_output: None,
-            },
-        );
-    }
-
-    #[test]
-    fn joining_receive_node_connected() {
-        let mut initial_state = initial_joining_state_with_dst_200();
-        initial_state.start(CANDIDATE_RELOCATED_INFO_132);
-
-        let initial_state = arrange_initial_joining_state(&initial_state, &[]);
-
-        run_joining_test(
-            "",
-            &initial_state,
-            &[
-                Rpc::NodeConnected(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))
-                    .to_event(),
-            ],
-            &AssertJoiningState {
-                action_our_events: vec![ActionTriggered::Killed(
-                    LocalEvent::JoiningTimeoutConnectRefused,
-                )
-                .to_event()],
                 routine_complete_output: None,
             },
         );
@@ -2000,14 +1829,7 @@ mod node_tests {
     fn joining_receive_two_resource_proof() {
         let mut initial_state = initial_joining_state_with_dst_200();
         initial_state.start(CANDIDATE_RELOCATED_INFO_132);
-
-        let initial_state = arrange_initial_joining_state(
-            &initial_state,
-            &[
-                Rpc::NodeConnected(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))
-                    .to_event(),
-            ],
-        );
+        let initial_state = arrange_initial_joining_state(&initial_state, &[]);
 
         run_joining_test(
             "Start computing resource proof when receiving ResourceProof RPC and setup timers.",
@@ -2028,9 +1850,7 @@ mod node_tests {
             ],
             &AssertJoiningState {
                 action_our_events: vec![
-                    ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutProofRefused).to_event(),
                     ActionTriggered::ComputeResourceProofForElder(NAME_111).to_event(),
-                    ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutProofRefused).to_event(),
                     ActionTriggered::ComputeResourceProofForElder(NAME_110).to_event(),
                 ],
                 routine_complete_output: None,
@@ -2042,14 +1862,7 @@ mod node_tests {
     fn joining_computed_two_proofs() {
         let mut initial_state = initial_joining_state_with_dst_200();
         initial_state.start(CANDIDATE_RELOCATED_INFO_132);
-
-        let initial_state = arrange_initial_joining_state(
-            &initial_state,
-            &[
-                Rpc::NodeConnected(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))
-                    .to_event(),
-            ],
-        );
+        let initial_state = arrange_initial_joining_state(&initial_state, &[]);
 
         run_joining_test(
             "When proof computed, start sending response to correct Elder.",
@@ -2088,8 +1901,6 @@ mod node_tests {
         let initial_state = arrange_initial_joining_state(
             &initial_state,
             &[
-                Rpc::NodeConnected(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))
-                    .to_event(),
                 Rpc::ResourceProof {
                     candidate: OUR_NODE_CANDIDATE,
                     source: NAME_111,
@@ -2129,8 +1940,6 @@ mod node_tests {
         let initial_state = arrange_initial_joining_state(
             &initial_state,
             &[
-                Rpc::NodeConnected(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))
-                    .to_event(),
                 Rpc::ResourceProof {
                     candidate: OUR_NODE_CANDIDATE,
                     source: NAME_111,
@@ -2170,8 +1979,18 @@ mod node_tests {
         let initial_state = arrange_initial_joining_state(
             &initial_state,
             &[
-                Rpc::NodeConnected(OUR_NODE_CANDIDATE, GenesisPfxInfo(DST_SECTION_INFO_200))
-                    .to_event(),
+                Rpc::ConnectionInfoResponse {
+                    source: NAME_110,
+                    destination: OUR_NAME,
+                    connection_info: NAME_110.0,
+                }
+                .to_event(),
+                Rpc::ConnectionInfoResponse {
+                    source: NAME_111,
+                    destination: OUR_NAME,
+                    connection_info: NAME_111.0,
+                }
+                .to_event(),
                 TestEvent::SetResourceProof(NAME_111, ProofSource(2)).to_event(),
                 LocalEvent::ResourceProofForElderReady(NAME_111).to_event(),
                 TestEvent::SetResourceProof(NAME_110, ProofSource(2)).to_event(),
@@ -2190,20 +2009,32 @@ mod node_tests {
         );
 
         run_joining_test(
-            "When connected, resend the incomplete proofs not sent within timeout.",
+            "When connected, resend connection info or candidate info as needed.",
             &initial_state,
-            &[
-                LocalEvent::JoiningTimeoutResendInfo.to_event(),
-                LocalEvent::JoiningTimeoutResendInfo.to_event(),
-            ],
+            &[LocalEvent::JoiningTimeoutResendInfo.to_event()],
             &AssertJoiningState {
                 action_our_events: vec![
-                    ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutResendInfo).to_event(),
-                    Rpc::ResourceProofResponse {
-                        candidate: OUR_NODE_CANDIDATE,
-                        destination: NAME_110,
-                        proof: Proof::ValidPart,
+                    Rpc::ConnectionInfoRequest {
+                        source: OUR_NAME,
+                        destination: NAME_109,
+                        connection_info: OUR_NAME.0,
                     }
+                    .to_event(),
+                    Rpc::CandidateInfo(CandidateInfo {
+                        old_public_id: OUR_NODE_CANDIDATE_OLD,
+                        new_public_id: OUR_NODE_CANDIDATE,
+                        destination: NAME_110,
+                        waiting_candidate_name: TARGET_INTERVAL_1,
+                        valid: true,
+                    })
+                    .to_event(),
+                    Rpc::CandidateInfo(CandidateInfo {
+                        old_public_id: OUR_NODE_CANDIDATE_OLD,
+                        new_public_id: OUR_NODE_CANDIDATE,
+                        destination: NAME_111,
+                        waiting_candidate_name: TARGET_INTERVAL_1,
+                        valid: true,
+                    })
                     .to_event(),
                     ActionTriggered::Scheduled(LocalEvent::JoiningTimeoutResendInfo).to_event(),
                 ],
