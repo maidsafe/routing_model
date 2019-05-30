@@ -497,7 +497,9 @@
         ResourceProof["StartResourceProof"]
         style ResourceProof fill:#f9f,stroke:#333,stroke-width:4px
 
-        ResourceProof --> LoopStart
+        ResourceProof --> StartCheckResourceProofTimeout
+        StartCheckResourceProofTimeout["schedule(<br />CheckResourceProofTimeout)"]
+        StartCheckResourceProofTimeout --> LoopStart
 
         WaitFor(("Wait for 3:"))
 
