@@ -765,7 +765,7 @@
 				There are 4 states the node may be in: State::InitialRelocation, State::RelocatingAgeIncrease,
 				State::RelocatingHop, and State::RelocatingBackOnline.<br />
                 Nodes will be selected in this order: State::RelocatingAgeIncrease, State::RelocatingHop,
-				State::InitialRelocation and then State::RelocatingBackOnline and tie break by age then name.<br />
+				State::RelocatingBackOnline and then State::InitialRelocation and tie break by age then name.<br />
                 This ensures that we prioritise good node relocation.
                 <br />
                 Note: It may be possible for a node to relocate to its sibling, and complete relocation after a merge
@@ -1367,6 +1367,11 @@
 			<p>A special node state, meaning that the node is only awaiting its initial relocation.
             </p>
         </div>
+        <button class="collapsible">can_accept</button>
+        <div class="content">
+			<p>A function that returns "true" if the number of nodes in State::InitialRelocation
+            we are connected to is less than the maximum allowed (to be defined).</p>
+        </div>
 	</div>
 	<div class="mermaid">
 		graph TB
@@ -1382,10 +1387,17 @@
 		WaitFor --"Parsec consensus"--> Consensus
 		Consensus(("Consensus"))
 
-		RPC --"Rpc::RequestRelocate"--> VoteNewNode
+		RPC --"Rpc::RequestRelocate"--> Check
+		Check(("Check"))
+		
+		Check --"can_accept"--> VoteNewNode
+		Check --"otherwise"--> Disconnect
 
 		VoteNewNode --> LoopEnd
 		VoteNewNode["vote_for(Parsec::NewCandidate)"]
+
+		Disconnect --> LoopEnd
+		Disconnect["Disconnect from the sender"]
 
 		Consensus --"Parsec::NewCandidate"--> AddNode
 
