@@ -50,16 +50,22 @@ impl<'a> RespondToRelocateRequests<'a> {
     }
 
     fn consensused_expect_candidate(&mut self, candidate: Candidate) {
-        match (
-            self.0.action.check_shortest_prefix(),
-            self.0.action.get_waiting_candidate_info(candidate),
-            self.0.action.count_waiting_proofing_or_hop(),
-        ) {
-            (Some(_), _, _) => self.send_expect_candidate_rpc(candidate),
-            (_, Some(info), _) => self.resend_relocate_response_rpc(info),
-            (_, _, 0) => self.add_node_and_send_relocate_response_rpc(candidate),
-            (_, _, _) => self.send_refuse_candidate_rpc(candidate),
+        if self.0.action.check_shortest_prefix().is_some() {
+            self.send_expect_candidate_rpc(candidate);
+            return;
         }
+
+        if let Some(info) = self.0.action.get_waiting_candidate_info(candidate) {
+            self.resend_relocate_response_rpc(info);
+            return;
+        }
+
+        if 0 == self.0.action.count_waiting_proofing_or_hop() {
+            self.add_node_and_send_relocate_response_rpc(candidate);
+            return;
+        }
+
+        self.send_refuse_candidate_rpc(candidate);
     }
 
     fn add_node_and_send_relocate_response_rpc(&mut self, candidate: Candidate) {
