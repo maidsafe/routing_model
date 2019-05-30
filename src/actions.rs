@@ -519,7 +519,7 @@ impl Action {
     pub fn get_connected_and_unconnected(&self, info: RelocatedInfo) -> (Vec<Name>, Vec<Name>) {
         self.get_section_elders(info.section_info)
             .into_iter()
-            .map(|node| node.name())
+            .map(Node::name)
             .partition(|name| self.0.borrow().connected.contains(name))
     }
 

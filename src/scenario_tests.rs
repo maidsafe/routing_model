@@ -312,7 +312,7 @@ mod dst_tests {
     }
 
     #[test]
-    fn parsec_expect_candidate_then_candidate_info11() {
+    fn parsec_expect_candidate_then_candidate_info() {
         let initial_state = arrange_initial_state(
             &initial_state_old_elders(),
             &[
