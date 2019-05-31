@@ -1397,9 +1397,13 @@
 		VoteNewNode["vote_for(Parsec::NewCandidate)"]
 
 		Disconnect --> LoopEnd
-		Disconnect["Disconnect from the sender"]
+		Disconnect["Disconnect from the node"]
 
-		Consensus --"Parsec::NewCandidate"--> AddNode
+		Consensus --"Parsec::NewCandidate"--> Check2
+		Check2(("Check"))
+
+		Check2 --"can_accept"--> AddNode
+		Check2 --"otherwise"--> Disconnect
 
 		AddNode --> LoopEnd
 		AddNode["add_node(NodeState=State::InitialRelocation)"]
