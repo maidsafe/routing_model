@@ -1354,6 +1354,12 @@
 		section and request a relocation for the new node. Then, everything will progress the same
 		way it does with a regular relocation.
 
+		Incoming connections are throttled by limiting the number of nodes that can await initial
+		relocation from a single section at a time.
+
+		This still leaves some openings for spam - creating a node that would connect and ask for an
+		initial relocation is cheap. Some additional countermeasures will be added in the future.
+
         <button class="collapsible">Parsec::NewCandidate</button>
         <div class="content">
 			<p>An event containing the name of the new candidate.<br />
