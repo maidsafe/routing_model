@@ -2,7 +2,7 @@
 authors = ["MaidSafe Developers <dev@maidsafe.net>"]
 description = "Documentation of the control and message flows in Routing, and tests for validating these."
 homepage = "https://maidsafe.net"
-license = "GPL-3.0"
+license = "MIT OR BSD-3-Clause"
 name = "routing_model"
 repository = "https://github.com/maidsafe/routing"
 version = "0.1.0"
