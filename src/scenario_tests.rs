@@ -628,8 +628,7 @@ mod dst_tests {
             ],
         );
 
-        let description =
-            "Ignore parsec votes not for the current candidate. \
+        let description = "Ignore parsec votes not for the current candidate. \
              The previous running resource proof for CANDIDATE_2 may have been cancelled, \
              or we would only see either of the votes later on.";
         run_test(

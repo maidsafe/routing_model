@@ -11,6 +11,7 @@ use rand::{
     distributions::{Distribution, Standard},
     Rng,
 };
+use std::cmp::Ordering;
 use std::fmt::{self, Debug, Formatter};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, PartialOrd, Eq, Ord)]
@@ -249,13 +250,11 @@ impl ProofSource {
         self.resend()
     }
 
-    pub fn resend(self) -> Option<Proof> {
-        if self.0 > 0 {
-            Some(Proof::ValidPart)
-        } else if self.0 == 0 {
-            Some(Proof::ValidEnd)
-        } else {
-            None
+    fn resend(self) -> Option<Proof> {
+        match self.0.cmp(&0) {
+            Ordering::Greater => Some(Proof::ValidPart),
+            Ordering::Equal => Some(Proof::ValidEnd),
+            Ordering::Less => None,
         }
     }
 }
