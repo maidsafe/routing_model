@@ -112,9 +112,10 @@
         LoopStart --> HasSection
         HasSection(("Check?"))
 
-        HasSection --"OWN_SECTION.is_none()"--> BootstrapAndRelocate
-        BootstrapAndRelocate["BootstrapAndRelocate:<br />Get RelocateInfo"]
-        BootstrapAndRelocate --> ReBootstrapWithNewIdentity
+        HasSection --"OWN_SECTION.is_none()"--> StartJoiningNode
+		StartJoiningNode["StartJoiningNode<br />"]
+        style StartJoiningNode fill:#f9f,stroke:#333,stroke-width:4px
+        StartJoiningNode --> ReBootstrapWithNewIdentity
 
         HasSection --"OWN_SECTION.is_some()"--> StartSectionMemberNode
         StartSectionMemberNode["StartSectionMemberNode<br />"]
@@ -131,6 +132,41 @@
         JoiningRelocateCandidate --> SetNodeApproval
 
         SetNodeApproval --> LoopEnd
+        LoopEnd --> LoopStart
+    </div>
+
+	<h2>Joining a section</h2>
+	<div class=description>
+		This section describes the flow the node will undergo when it is not a member of any section.<br />
+		During this time, a node will contact a section, request info necessary for its first relocation, then wait until its reception.<br />
+        <button class="collapsible">Rpc::RequestRelocate</button>
+        <div class="content">
+			An RPC to be sent by a new joining node to its proxy in order to kickstart the initial relocation.
+        </div>
+	</div>
+    <div class="mermaid">
+        graph TB
+
+        StartJoiningNode --> Connect
+		style StartJoiningNode fill:#f9f,stroke:#333,stroke-width:4px
+
+		Connect --> LoopStart
+		Connect["Connect to a proxy<br />Send Rpc::RequestRelocate"]
+
+        LoopStart --> WaitFor
+        WaitFor(("Wait for 0:"))
+
+        WaitFor --> RPC
+		RPC(("RPC"))
+
+		RPC --"Rpc::RelocatedInfo"--> End
+		End["End of StartJoiningNode"]
+		style End fill:#f9f,stroke:#333,stroke-width:4px
+
+		RPC --"Other" --> Discard
+		Discard["Discard RPC"]
+
+		Discard --> LoopEnd
         LoopEnd --> LoopStart
     </div>
 
@@ -298,6 +334,9 @@
 
         ConcurrentStartElder --> StartConnectionHandler
         style StartConnectionHandler fill:#f9f,stroke:#333,stroke-width:4px
+
+		ConcurrentStartElder --> StartRespondToJoinRequests
+		style StartRespondToJoinRequests fill:#f9f,stroke:#333,stroke-width:4px
 
         ConcurrentStartElder --> WaitFor
 
@@ -723,10 +762,10 @@
                 Using a target address instead of a section ensures we deliver the message even if the destination
                 splits or merges.<br />
                 <br />
-                There are 3 states the node may be: State::RelocatingAgeIncrease, State::RelocatingHop, and
-                State::RelocatingBackOnline.<br />
-                Nodes will be selected in this order: State::RelocatingAgeIncrease, State::RelocatingHop and then
-                State::RelocatingBackOnline and tie break by age then name.<br />
+				There are 4 states the node may be in: State::InitialRelocation, State::RelocatingAgeIncrease,
+				State::RelocatingHop, and State::RelocatingBackOnline.<br />
+                Nodes will be selected in this order: State::RelocatingAgeIncrease, State::RelocatingHop,
+				State::RelocatingBackOnline and then State::InitialRelocation and tie break by age then name.<br />
                 This ensures that we prioritise good node relocation.
                 <br />
                 Note: It may be possible for a node to relocate to its sibling, and complete relocation after a merge
@@ -1307,6 +1346,76 @@
         SetRelocating --> LoopEnd
         LoopEnd --> LoopStart
     </div>
+
+	<h2>Handling join requests from new nodes</h2>
+	<div class=description>
+		This is the flow for section members to handle nodes that attempt to join the network.
+		When an incoming connection is detected, the section member will notify the rest of the
+		section and request a relocation for the new node. Then, everything will progress the same
+		way it does with a regular relocation.
+
+		Incoming connections are throttled by limiting the number of nodes that can await initial
+		relocation from a single section at a time.
+
+		This still leaves some openings for spam - creating a node that would connect and ask for an
+		initial relocation is cheap. Some additional countermeasures will be added in the future.
+
+        <button class="collapsible">Parsec::NewCandidate</button>
+        <div class="content">
+			<p>An event containing the name of the new candidate.<br />
+			A new candidate will only contact a single member of the section. Thus, this will
+			only require a single vote to accumulate. Once such a single event gets consensused,
+			all nodes that receive it via poll() will act upon it.
+            </p>
+        </div>
+        <button class="collapsible">State::InitialRelocation</button>
+        <div class="content">
+			<p>A special node state, meaning that the node is only awaiting its initial relocation.
+            </p>
+        </div>
+        <button class="collapsible">can_accept</button>
+        <div class="content">
+			<p>A function that returns "true" if the number of nodes in State::InitialRelocation
+            we are connected to is less than the maximum allowed (to be defined).</p>
+        </div>
+	</div>
+	<div class="mermaid">
+		graph TB
+		StartRespondToJoinRequests --> LoopStart
+		style StartRespondToJoinRequests fill:#f9f,stroke:#333,stroke-width:4px
+
+		WaitFor(("Wait for 10:"))
+		LoopStart --> WaitFor
+
+		WaitFor --"RPC"--> RPC
+		RPC(("RPC"))
+
+		WaitFor --"Parsec consensus"--> Consensus
+		Consensus(("Consensus"))
+
+		RPC --"Rpc::RequestRelocate"--> Check
+		Check(("Check"))
+		
+		Check --"can_accept"--> VoteNewNode
+		Check --"otherwise"--> Disconnect
+
+		VoteNewNode --> LoopEnd
+		VoteNewNode["vote_for(Parsec::NewCandidate)"]
+
+		Disconnect --> LoopEnd
+		Disconnect["Disconnect from the node"]
+
+		Consensus --"Parsec::NewCandidate"--> Check2
+		Check2(("Check"))
+
+		Check2 --"can_accept"--> AddNode
+		Check2 --"otherwise"--> Disconnect
+
+		AddNode --> LoopEnd
+		AddNode["add_node(NodeState=State::InitialRelocation)"]
+
+		LoopEnd --> LoopStart
+	</div>
 
     <h1>Node relocation overview</h1>
 
